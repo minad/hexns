@@ -33,6 +33,11 @@ deadbeaf.kernel.org.	30	IN	AAAA	1:2:3:4:dead:beaf:feff:e10f
 ;; MSG SIZE  rcvd: 65
 ~~~
 
+## More ideas
+
+* shans: Translate to sha ip
+* colons: Translate color names to ips
+
 ## License
 
 ~~~
