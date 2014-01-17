@@ -1,11 +1,8 @@
 #include <arpa/inet.h>
-#include <netinet/in.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <stdint.h>
 #include <stdlib.h>
 
 static char buf[4096];
@@ -36,7 +33,7 @@ void ip6suffix(char* dst, size_t size, const char* name) {
         char tmp[strlen(name)];
         int pos = 0;
         while (*name) {
-                char c = 15;
+                char c = 0;
                 switch(*name) {
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
@@ -59,6 +56,18 @@ void ip6suffix(char* dst, size_t size, const char* name) {
                 case 'j': case 'J':
                         c = 1;
                         break;
+                case 'p': case 'P':
+                        c = 13;
+                        break;
+                case 't': case 'T':
+                        c = 7;
+                        break;
+                case 'g': case 'G':
+                        c = 6;
+                        break;
+                default:
+                        ++name;
+                        continue;
                 }
 
                 if (pos % 2)

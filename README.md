@@ -6,30 +6,30 @@ Nameserver for IPv6 which resolves Hexspeak subdomains
 
 ~~~
 make
-./hexns 3000 1:2:3:4::
-dig -p 3000 @127.0.0.1 deadbeaf.kernel.org AAAA
+./hexns 3000 64 1:2:3:4:: kernel.org
+dig -p 3000 @127.0.0.1 deadbeef.kernel.org AAAA
 ~~~
 
 resolves a hexspeek ipv6 address
 
 ~~~
-; <<>> DiG 9.9.2-P2 <<>> -p 3000 @127.0.0.1 deadbeaf.kernel.org AAAA
+; <<>> DiG 9.8.4-rpz2+rl005.12-P1 <<>> -p 3000 @127.0.0.1 deadbeef.kernel.org AAAA
 ; (1 server found)
 ;; global options: +cmd
 ;; Got answer:
-;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 64211
-;; flags: qr rd ad; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 20862
+;; flags: qr rd; QUERY: 1, ANSWER: 1, AUTHORITY: 0, ADDITIONAL: 0
 ;; WARNING: recursion requested but not available
 
 ;; QUESTION SECTION:
-;deadbeaf.kernel.org.		IN	AAAA
+;deadbeef.kernel.org.		IN	AAAA
 
 ;; ANSWER SECTION:
-deadbeaf.kernel.org.	30	IN	AAAA	1:2:3:4:dead:beaf:feff:e10f
+deadbeef.kernel.org.	30	IN	AAAA	1:2:3:4::dead:beef
 
-;; Query time: 1 msec
+;; Query time: 0 msec
 ;; SERVER: 127.0.0.1#3000(127.0.0.1)
-;; WHEN: Fri Jan 17 04:58:05 2014
+;; WHEN: Fri Jan 17 13:34:47 2014
 ;; MSG SIZE  rcvd: 65
 ~~~
 
