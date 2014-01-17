@@ -18,7 +18,16 @@ start() {
 
 status=0
 aaaa() {
-    output=$(dig -p 3000 @127.0.0.1 $1.$domain AAAA)
+    output=$(dig -p 3000 @127.0.0.1 $1.$domain AAAA $1.$domain A)
+    #echo "$output" | grep -i 'WARNING'
+    if echo "$output" | grep -P "30\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
+	echo -n '.'
+    else
+	echo -e "\nERROR $1.$domain"
+	status=1
+    fi
+
+    output=$(dig -p 3000 @127.0.0.1 $1.$domain ANY)
     #echo "$output" | grep -i 'WARNING'
     if echo "$output" | grep -P "30\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
@@ -32,6 +41,8 @@ aaaa() {
         #echo "$output" | grep -i 'WARNING'
 	if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
 	    echo -e "\nERROR Record $record found"
+	else
+	    echo -n '.'
 	fi
     done
 }

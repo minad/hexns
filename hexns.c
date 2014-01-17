@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #define TYPE_AAAA    28
+#define TYPE_ANY     255
 #define FLAG_QR      0x8000
 #define LABEL_BITS   0xC000
 #define ERROR_FORMAT 0x0001
@@ -28,7 +29,7 @@ static void die(const char* name) {
         exit(1);
 }
 
-static void ip6suffix(char* dst, size_t size, const char* name) {
+static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
         char tmp[strlen(name)];
         char* p = tmp;
         for (; *name; ++name) {
@@ -79,7 +80,7 @@ static void ip6suffix(char* dst, size_t size, const char* name) {
         if (p - tmp > 2 * size)
                 p = tmp + 2 * size;
         --p;
-        for (char* q = dst + size - 1; q >= dst; --q) {
+        for (uint8_t* q = dst + size - 1; q >= dst; --q) {
                 if (p >= tmp) {
                         *q = *p--;
                         if (p >= tmp)
@@ -138,20 +139,12 @@ int main(int argc, char* argv[]) {
 
                 struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t qdcount = ntohs(h->qdcount), ancount = 0, error = 0;
-                char *q = buf + sizeof (struct dnsheader), *qend = buf + size, *a = ans, *aend = ans + sizeof (ans);
+                char *q = buf + sizeof (struct dnsheader), *qend = buf + size, *a = ans;
 
                 for (uint32_t i = 0; i < qdcount && q < qend; ++i) {
-                        char* areset = a;
+                        uint16_t label = q - buf;
+
                         char name[512];
-
-                        if (a + 6 > aend) {
-                                error = ERROR_SERVER;
-                                break;
-                        }
-
-                        *((uint16_t*)a) = htons((q - buf) | LABEL_BITS);
-                        a += 2;
-
                         char* p = name, *pend = name + sizeof(name) - 1;
                         while (q < qend && *q) {
                                 int n = *q++;
@@ -175,43 +168,42 @@ int main(int argc, char* argv[]) {
                         }
 
                         uint16_t qtype = ntohs(*((uint16_t*)q));
-                        *a++ = *q++;
-                        *a++ = *q++;
-                        //uint16_t qclass = ntohs(*((uint16_t*)q));
-                        *a++ = *q++;
-                        *a++ = *q++;
+                        q += 2;
+                        uint16_t qclass = ntohs(*((uint16_t*)q));
+                        q += 2;
                         //printf("qtype=%d qclass=%d\n", qtype, qclass);
 
-                        printf("Q %s\n", name);
-
-                        if (qtype == TYPE_AAAA) {
+                        if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
+                                printf("Q%d %s %s\n", i, qtype == TYPE_AAAA ? "AAAA" : "ANY",  name);
                                 char* p = strstr(name, domain);
                                 if (p && p > name && *(p-1) == '.') {
                                         *(p-1) = 0;
 
-                                        if (a + 22 > aend) {
+                                        if (a + 28 > ans + sizeof (ans)) {
                                                 error = ERROR_SERVER;
                                                 break;
                                         }
 
+                                        *((uint16_t*)a) = htons(label | LABEL_BITS);
+                                        a += 2;
+                                        *((uint16_t*)a) = htons(TYPE_AAAA);
+                                        a += 2;
+                                        *((uint16_t*)a) = htons(qclass);
+                                        a += 2;
                                         *((uint32_t*)a) = htonl(30);
                                         a += 4;
-
                                         *((uint16_t*)a) = htons(16);
                                         a += 2;
+
                                         memcpy(a, &prefix, bytes);
-                                        ip6suffix(a + bytes, 16 - bytes, name);
+                                        ip6suffix((uint8_t*)a + bytes, 16 - bytes, name);
 
                                         inet_ntop(AF_INET6, a, name, sizeof (name));
-                                        a += 16;
-                                        printf("R %s\n", name);
+                                        printf("R%d %s\n", i, name);
 
+                                        a += 16;
                                         ++ancount;
-                                } else {
-                                        a = areset;
                                 }
-                        } else {
-                                a = areset;
                         }
                 }
 
