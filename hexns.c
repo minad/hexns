@@ -36,11 +36,6 @@ struct dnsanswer {
         uint8_t  rdata[0];
 } __attribute__ ((packed));
 
-static void die(const char* name) {
-        perror(name);
-        exit(1);
-}
-
 static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
         char tmp[strlen(name)];
         char* p = tmp;
@@ -114,7 +109,7 @@ int main(int argc, char* argv[]) {
 
         int port = atoi(argv[1]);
         size_t bytes = atoi(argv[2]);
-        if (bytes % 8 != 0)
+        if (bytes % 8)
                 bytes += 8;
         bytes /= 8;
         if (bytes >= 16) {
@@ -131,8 +126,10 @@ int main(int argc, char* argv[]) {
         const char* domain = argv[4];
 
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock < 0)
-                die("socket");
+        if (sock < 0) {
+                perror("socket");
+                return 1;
+        }
 
         struct sockaddr_in6 sa;
         memset(&sa, 0, sizeof (sa));
@@ -140,8 +137,10 @@ int main(int argc, char* argv[]) {
         sa.sin6_port = htons(port);
         sa.sin6_addr = in6addr_any;
 
-        if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
-                die("bind");
+        if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
+                perror("bind");
+                return 1;
+        }
 
         for (;;) {
                 struct sockaddr_storage ss;
@@ -162,14 +161,14 @@ int main(int argc, char* argv[]) {
                         char name[512];
                         char* p = name, *pend = name + sizeof(name) - 1;
                         while (q < qend && *q) {
-                                int n = *q++;
+                                size_t n = *q++;
                                 if (n > 63) {
                                         error = ERROR_FORMAT;
                                         break;
                                 }
                                 if (p != name && p < pend)
                                         *p++ = '.';
-                                int m = pend - p;
+                                size_t m = pend - p;
                                 if (m > n)
                                         m = n;
                                 if (m > 0) {
@@ -186,11 +185,9 @@ int main(int argc, char* argv[]) {
                         if (error)
                                 break;
 
-
                         uint16_t qtype = ntohs(*((uint16_t*)q));
-                        q += 2;
-                        uint16_t qclass = ntohs(*((uint16_t*)q));
-                        q += 2;
+                        uint16_t qclass = ntohs(*((uint16_t*)q + 1));
+                        q += 4;
                         //printf("qtype=%d qclass=%d\n", qtype, qclass);
 
                         if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
