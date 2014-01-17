@@ -5,15 +5,18 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define TYPE_AAAA    28
-#define TYPE_ANY     255
+#define TYPE_AAAA    0x1C
+#define TYPE_ANY     0xFF
+#define CLASS_INET   0x01
+#define CLASS_CHAOS  0x03
 #define FLAG_QR      0x8000
 #define LABEL_BITS   0xC000
 #define ERROR_FORMAT 0x0001
 #define ERROR_SERVER 0x0002
 #define ERROR_MASK   0x000F
+#define BUFSIZE      0x1000
 
-static char buf[4096], ans[4096];
+static char buf[BUFSIZE], ans[BUFSIZE];
 
 struct dnsheader {
         uint16_t id;
@@ -62,14 +65,17 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
                 case 'i': case 'I': case 'l': case 'L': case 'j': case 'J':
                         *p++ = 1;
                         break;
+                case 'g': case 'G': case 'q': case 'Q':
+                        *p++ = 6;
+                        break;
                 case 'p': case 'P':
                         *p++ = 13;
                         break;
+                case 's': case 'S':
+                        *p++ = 5;
+                        break;
                 case 't': case 'T':
                         *p++ = 7;
-                        break;
-                case 'g': case 'G':
-                        *p++ = 6;
                         break;
                 case 195:
                         if ((uint8_t)name[1] == 164) {
@@ -157,6 +163,10 @@ int main(int argc, char* argv[]) {
                         char* p = name, *pend = name + sizeof(name) - 1;
                         while (q < qend && *q) {
                                 int n = *q++;
+                                if (n > 63) {
+                                        error = ERROR_FORMAT;
+                                        break;
+                                }
                                 if (p != name && p < pend)
                                         *p++ = '.';
                                 int m = pend - p;
@@ -171,10 +181,11 @@ int main(int argc, char* argv[]) {
                         *p = 0;
                         ++q;
 
-                        if (q + 4 > qend) {
+                        if (q + 4 > qend)
                                 error = ERROR_FORMAT;
+                        if (error)
                                 break;
-                        }
+
 
                         uint16_t qtype = ntohs(*((uint16_t*)q));
                         q += 2;
@@ -182,7 +193,7 @@ int main(int argc, char* argv[]) {
                         q += 2;
                         //printf("qtype=%d qclass=%d\n", qtype, qclass);
 
-                        if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
+                        if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
                                 printf("Q%d %s %s\n", i, qtype == TYPE_AAAA ? "AAAA" : "ANY",  name);
                                 char* p = strstr(name, domain);
                                 if (p && p > name && *(p-1) == '.') {
@@ -228,8 +239,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 h->flags |= htons(FLAG_QR | error);
-                h->nscount = 0;
-                h->arcount = 0;
+                h->nscount = h->arcount = 0;
                 h->ancount = htons(ancount);
 
                 size = sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen);
