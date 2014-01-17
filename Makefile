@@ -6,4 +6,4 @@ hexns: hexns.c
 	$(CC) -g -std=c11 -Wall -o $@ $<
 
 test: hexns
-	./test.sh
+	@./test.sh
