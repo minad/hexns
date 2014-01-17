@@ -29,56 +29,66 @@ void die(const char* name) {
         exit(1);
 }
 
-void ip6suffix(char* dst, size_t size, const char* name) {
+void ip6suffix(char* dst, size_t size, const unsigned char* name) {
         char tmp[strlen(name)];
-        int pos = 0;
-        while (*name) {
-                char c = 0;
+        char* p = tmp;
+        for (; *name; ++name) {
                 switch(*name) {
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
-                        c = *name - '0';
+                        *p++ = *name - '0';
                         break;
                 case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-                        c = 10 + *name - 'a';
+                        *p++ = 10 + *name - 'a';
                         break;
                 case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-                        c = 10 + *name - 'A';
+                        *p++ = 10 + *name - 'A';
                         break;
                 case 'o': case 'O':
-                        c = 0;
+                        *p++ = 0;
                         break;
                 case 'z': case 'Z':
-                        c = 12;
+                        *p++ = 12;
                         break;
                 case 'i': case 'I':
                 case 'l': case 'L':
                 case 'j': case 'J':
-                        c = 1;
+                        *p++ = 1;
                         break;
                 case 'p': case 'P':
-                        c = 13;
+                        *p++ = 13;
                         break;
                 case 't': case 'T':
-                        c = 7;
+                        *p++ = 7;
                         break;
                 case 'g': case 'G':
-                        c = 6;
+                        *p++ = 6;
+                        break;
+                case 195:
+                        if (name[1] == 164) {
+                                *p++ = 10;
+                                *p++ = 14;
+                                ++name;
+                        } else if (name[1] == 182) {
+                                *p++ = 0;
+                                *p++ = 14;
+                                ++name;
+                        }
                         break;
                 default:
-                        ++name;
-                        continue;
+                        break;
                 }
-
-                if (pos % 2)
-                        tmp[pos/2] |= c;
-                else
-                        tmp[pos/2] = c << 4;
-                ++pos;
-                ++name;
         }
-        memset(dst, 0, size - pos/2);
-        memcpy(dst + size - pos/2, tmp, pos/2);
+        --p;
+        for (char* q = dst + size - 1; q >= dst; --q) {
+                if (p >= tmp) {
+                        *q = *p--;
+                        if (p >= tmp)
+                                *q |= *p-- << 4;
+                } else {
+                        *q = 0;
+                }
+        }
 }
 
 int main(int argc, char* argv[]) {
@@ -171,7 +181,7 @@ int main(int argc, char* argv[]) {
                         *a++ = *q++;
                         //printf("qtype=%d qclass=%d\n", qtype, qclass);
 
-                        printf("%s\n", name);
+                        printf("Q %s\n", name);
 
                         if (qtype == TYPE_AAAA) {
                                 char* p = strstr(name, nameprefix);
@@ -190,7 +200,10 @@ int main(int argc, char* argv[]) {
                                         a += 2;
                                         memcpy(a, &prefix, bytes);
                                         ip6suffix(a + bytes, 16 - bytes, name);
+
+                                        inet_ntop(AF_INET6, a, name, sizeof (name));
                                         a += 16;
+                                        printf("R %s\n", name);
 
                                         ++ancount;
                                 } else {
