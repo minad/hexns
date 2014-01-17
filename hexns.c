@@ -22,7 +22,16 @@ struct dnsheader {
         uint16_t ancount;
         uint16_t nscount;
         uint16_t arcount;
-};
+} __attribute__ ((packed));
+
+struct dnsanswer {
+        uint16_t label;
+        uint16_t type;
+        uint16_t class;
+        uint32_t ttl;
+        uint16_t rdlength;
+        uint8_t  rdata[0];
+} __attribute__ ((packed));
 
 static void die(const char* name) {
         perror(name);
@@ -179,29 +188,25 @@ int main(int argc, char* argv[]) {
                                 if (p && p > name && *(p-1) == '.') {
                                         *(p-1) = 0;
 
-                                        if (a + 28 > ans + sizeof (ans)) {
+                                        struct dnsanswer* s = (struct dnsanswer*)a;
+                                        a += sizeof (struct dnsanswer) + 16;
+                                        if (a > ans + sizeof (ans)) {
                                                 error = ERROR_SERVER;
                                                 break;
                                         }
 
-                                        *((uint16_t*)a) = htons(label | LABEL_BITS);
-                                        a += 2;
-                                        *((uint16_t*)a) = htons(TYPE_AAAA);
-                                        a += 2;
-                                        *((uint16_t*)a) = htons(qclass);
-                                        a += 2;
-                                        *((uint32_t*)a) = htonl(30);
-                                        a += 4;
-                                        *((uint16_t*)a) = htons(16);
-                                        a += 2;
+                                        s->label = htons(label | LABEL_BITS);
+                                        s->type = htons(TYPE_AAAA);
+                                        s->class = htons(qclass);
+                                        s->ttl = htonl(30);
+                                        s->rdlength = htons(16);
 
-                                        memcpy(a, &prefix, bytes);
-                                        ip6suffix((uint8_t*)a + bytes, 16 - bytes, name);
+                                        memcpy(s->rdata, &prefix, bytes);
+                                        ip6suffix(s->rdata + bytes, 16 - bytes, name);
 
-                                        inet_ntop(AF_INET6, a, name, sizeof (name));
+                                        inet_ntop(AF_INET6, s->rdata, name, sizeof (name));
                                         printf("R%d %s\n", i, name);
 
-                                        a += 16;
                                         ++ancount;
                                 }
                         }
