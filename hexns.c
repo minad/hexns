@@ -5,15 +5,14 @@
 #include <string.h>
 #include <stdlib.h>
 
-static char buf[4096];
-static char ans[4096];
-
 #define TYPE_AAAA    28
 #define FLAG_QR      0x8000
 #define LABEL_BITS   0xC000
 #define ERROR_FORMAT 0x0001
 #define ERROR_SERVER 0x0002
 #define ERROR_MASK   0x000F
+
+static char buf[4096], ans[4096];
 
 struct dnsheader {
         uint16_t id;
@@ -24,16 +23,16 @@ struct dnsheader {
         uint16_t arcount;
 };
 
-void die(const char* name) {
+static void die(const char* name) {
         perror(name);
         exit(1);
 }
 
-void ip6suffix(char* dst, size_t size, const unsigned char* name) {
+static void ip6suffix(char* dst, size_t size, const char* name) {
         char tmp[strlen(name)];
         char* p = tmp;
         for (; *name; ++name) {
-                switch(*name) {
+                switch((uint8_t)*name) {
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                         *p++ = *name - '0';
@@ -50,9 +49,7 @@ void ip6suffix(char* dst, size_t size, const unsigned char* name) {
                 case 'z': case 'Z':
                         *p++ = 12;
                         break;
-                case 'i': case 'I':
-                case 'l': case 'L':
-                case 'j': case 'J':
+                case 'i': case 'I': case 'l': case 'L': case 'j': case 'J':
                         *p++ = 1;
                         break;
                 case 'p': case 'P':
@@ -65,11 +62,11 @@ void ip6suffix(char* dst, size_t size, const unsigned char* name) {
                         *p++ = 6;
                         break;
                 case 195:
-                        if (name[1] == 164) {
+                        if ((uint8_t)name[1] == 164) {
                                 *p++ = 10;
                                 *p++ = 14;
                                 ++name;
-                        } else if (name[1] == 182) {
+                        } else if ((uint8_t)name[1] == 182) {
                                 *p++ = 0;
                                 *p++ = 14;
                                 ++name;
@@ -79,6 +76,8 @@ void ip6suffix(char* dst, size_t size, const unsigned char* name) {
                         break;
                 }
         }
+        if (p - tmp > 2 * size)
+                p = tmp + 2 * size;
         --p;
         for (char* q = dst + size - 1; q >= dst; --q) {
                 if (p >= tmp) {
@@ -93,7 +92,7 @@ void ip6suffix(char* dst, size_t size, const unsigned char* name) {
 
 int main(int argc, char* argv[]) {
         if (argc != 5) {
-                printf("Usage: %s port ip6bits ip6prefix nameprefix\n", argv[0]);
+                printf("Usage: %s port ip6bits ip6prefix domain\n", argv[0]);
                 return 1;
         }
 
@@ -103,7 +102,7 @@ int main(int argc, char* argv[]) {
                 bytes += 8;
         bytes /= 8;
         if (bytes >= 16) {
-                printf("Bits must be less than 128\n");
+                printf("Number of prefix bits must be less than 128\n");
                 return 1;
         }
 
@@ -113,7 +112,7 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        const char* nameprefix = argv[4];
+        const char* domain = argv[4];
 
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
         if (sock < 0)
@@ -130,21 +129,22 @@ int main(int argc, char* argv[]) {
 
         for (;;) {
                 struct sockaddr_storage ss;
-
                 socklen_t sslen = sizeof (ss);
                 ssize_t size = recvfrom(sock, buf, sizeof (buf), 0, (struct sockaddr*)&ss, &sslen);
-                if (size < 0)
+                if (size < 0) {
                         perror("recvfrom");
+                        continue;
+                }
 
                 struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t qdcount = ntohs(h->qdcount), ancount = 0, error = 0;
-                char *q = buf + sizeof (struct dnsheader), *bufend = buf + size, *a = ans, *ansend = ans + sizeof (ans);
+                char *q = buf + sizeof (struct dnsheader), *qend = buf + size, *a = ans, *aend = ans + sizeof (ans);
 
-                for (uint32_t i = 0; i < qdcount && q < bufend; ++i) {
+                for (uint32_t i = 0; i < qdcount && q < qend; ++i) {
                         char* areset = a;
                         char name[512];
 
-                        if (a + 6 > ansend) {
+                        if (a + 6 > aend) {
                                 error = ERROR_SERVER;
                                 break;
                         }
@@ -152,23 +152,24 @@ int main(int argc, char* argv[]) {
                         *((uint16_t*)a) = htons((q - buf) | LABEL_BITS);
                         a += 2;
 
-                        char* p = name, *nameend = name + sizeof(name) - 1;
-
-                        while (q < bufend && *q) {
+                        char* p = name, *pend = name + sizeof(name) - 1;
+                        while (q < qend && *q) {
                                 int n = *q++;
-                                if (p != name && p < nameend)
+                                if (p != name && p < pend)
                                         *p++ = '.';
-                                int m = nameend - p;
+                                int m = pend - p;
                                 if (m > n)
                                         m = n;
-                                memcpy(p, q, m);
-                                p += m;
-                                q += n;
+                                if (m > 0) {
+                                        memcpy(p, q, m);
+                                        p += m;
+                                        q += n;
+                                }
                         }
                         *p = 0;
                         ++q;
 
-                        if (q + 4 > bufend) {
+                        if (q + 4 > qend) {
                                 error = ERROR_FORMAT;
                                 break;
                         }
@@ -184,11 +185,11 @@ int main(int argc, char* argv[]) {
                         printf("Q %s\n", name);
 
                         if (qtype == TYPE_AAAA) {
-                                char* p = strstr(name, nameprefix);
+                                char* p = strstr(name, domain);
                                 if (p && p > name && *(p-1) == '.') {
                                         *(p-1) = 0;
 
-                                        if (a + 22 > ansend) {
+                                        if (a + 22 > aend) {
                                                 error = ERROR_SERVER;
                                                 break;
                                         }
