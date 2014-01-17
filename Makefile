@@ -1,2 +1,3 @@
+CC=clang
 hexns: hexns.c
-	gcc -std=c11 -Wall -o $@ $<
+	$(CC) -g -std=c11 -Wall -o $@ $<
