@@ -12,7 +12,7 @@ stop() {
 start() {
     stop
     domain=$3
-    ./hexns 3000 $1 $2 $3 2>>test.log >>test.log &
+    ./hexns 3000 $1 $2 $3 > /dev/null &
     pid=$!
 }
 
@@ -24,6 +24,7 @@ aaaa() {
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
+	#echo "$output" | grep -P AAAA
 	status=1
     fi
 
@@ -49,21 +50,28 @@ aaaa() {
 
 start 64 1:2:3:4:: kernel.org
 aaaa dadadadadadadada 1:2:3:4:dada:dada:dada:dada
+aaaa dada.dada.dada.dada 1:2:3:4:dada:dada:dada:dada
 aaaa dadadadadadadadaabcd 1:2:3:4:dada:dada:dada:dada
+aaaa dadad.ad.ada.dad.adaabcd 1:2:3:4:dada:dada:dada:dada
 aaaa dadadadadadadadaab 1:2:3:4:dada:dada:dada:dada
 aaaa coffee 1:2:3:4::c0:ffee
+aaaa c.offee 1:2:3:4::c0:ffee
 aaaa cä 1:2:3:4::cae
-aaaa cö 1:2:3:4::c0e
-aaaa cäf 1:2:3:4::caef
-aaaa cöf 1:2:3:4::c0ef
+aaaa c.ä 1:2:3:4::cae
+aaaa zö 1:2:3:4::c0e
+aaaa z.ö 1:2:3:4::c0e
+aaaa zäf 1:2:3:4::caef
+aaaa zä.f 1:2:3:4::caef
+aaaa zöf 1:2:3:4::c0ef
+aaaa z.öf 1:2:3:4::c0ef
 
 start 32 a:b:: org
 aaaa dadadadadadadada a:b::dada:dada:dada:dada
 aaaa coffee a:b::c0:ffee
 aaaa cä a:b::cae
-aaaa cö a:b::c0e
-aaaa cäf a:b::caef
-aaaa cöf a:b::c0ef
+aaaa zö a:b::c0e
+aaaa zäf a:b::caef
+aaaa zöf a:b::c0ef
 stop
 
 echo

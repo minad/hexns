@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <idna.h>
 
 #define TYPE_AAAA    0x1C
 #define TYPE_ANY     0xFF
@@ -37,19 +38,22 @@ struct dnsanswer {
 } __attribute__ ((packed));
 
 static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
-        char tmp[strlen(name)];
-        char* p = tmp;
-        for (; *name; ++name) {
-                switch((uint8_t)*name) {
+        uint8_t* out;
+        idna_to_unicode_8z8z(name, (char**)&out, 0);
+
+        uint8_t tmp[2 * size];
+        uint8_t* p = tmp, *q = out;
+        for (; *q && p < tmp + sizeof (tmp); ++q) {
+                switch(*q) {
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
-                        *p++ = *name - '0';
+                        *p++ = *q - '0';
                         break;
                 case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-                        *p++ = 10 + *name - 'a';
+                        *p++ = 10 + *q - 'a';
                         break;
                 case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-                        *p++ = 10 + *name - 'A';
+                        *p++ = 10 + *q - 'A';
                         break;
                 case 'o': case 'O':
                         *p++ = 0;
@@ -73,22 +77,22 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
                         *p++ = 7;
                         break;
                 case 195:
-                        if ((uint8_t)name[1] == 164) {
+                        if (q[1] == 164) {
                                 *p++ = 10;
-                                *p++ = 14;
-                                ++name;
-                        } else if ((uint8_t)name[1] == 182) {
+                                if (p < tmp + sizeof (tmp))
+                                        *p++ = 14;
+                                ++q;
+                        } else if (q[1] == 182) {
                                 *p++ = 0;
-                                *p++ = 14;
-                                ++name;
+                                if (p < tmp + sizeof (tmp))
+                                        *p++ = 14;
+                                ++q;
                         }
                         break;
                 default:
                         break;
                 }
         }
-        if (p - tmp > 2 * size)
-                p = tmp + 2 * size;
         --p;
         for (uint8_t* q = dst + size - 1; q >= dst; --q) {
                 if (p >= tmp) {
@@ -99,6 +103,8 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
                         *q = 0;
                 }
         }
+
+        free(out);
 }
 
 int main(int argc, char* argv[]) {
