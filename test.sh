@@ -65,6 +65,7 @@ aaaa zä.f 1:2:3:4::caef
 aaaa zöf 1:2:3:4::c0ef
 aaaa zöööf 1:2:3:4::c0e0:e0ef
 aaaa z.öf 1:2:3:4::c0ef
+aaaa zöph 1:2:3:4::c0ef
 
 start 32 a:b:: org
 aaaa dadadadadadadada a:b::dada:dada:dada:dada
@@ -74,6 +75,7 @@ aaaa zö a:b::c0e
 aaaa zäf a:b::caef
 aaaa zöf a:b::c0ef
 aaaa zöööf a:b::c0e0:e0ef
+aaaa zöph a:b::c0ef
 stop
 
 echo

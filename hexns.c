@@ -68,7 +68,12 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
                         *p++ = 6;
                         break;
                 case 'p': case 'P':
-                        *p++ = 13;
+                        if (q[1] == 'h' || q[1] == 'H') {
+                                *p++ = 15;
+                                ++q;
+                        } else {
+                                *p++ = 13;
+                        }
                         break;
                 case 's': case 'S':
                         *p++ = 5;
