@@ -66,6 +66,9 @@ aaaa zöf 1:2:3:4::c0ef
 aaaa zöööf 1:2:3:4::c0e0:e0ef
 aaaa z.öf 1:2:3:4::c0ef
 aaaa zöph 1:2:3:4::c0ef
+aaaa zofenpeter 1:2:3:4::c0fe:be7e
+aaaa leet 1:2:3:4::1337
+aaaa daleetda 1:2:3:4::da13:37da
 
 start 32 a:b:: org
 aaaa dadadadadadadada a:b::dada:dada:dada:dada

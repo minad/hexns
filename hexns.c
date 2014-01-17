@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <idna.h>
+#include <ctype.h>
 
 #define TYPE_AAAA    0x1C
 #define TYPE_ANY     0xFF
@@ -41,72 +42,54 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
         uint8_t* out;
         idna_to_unicode_8z8z(name, (char**)&out, 0);
 
-        uint8_t tmp[2 * size];
-        uint8_t* p = tmp, *q = out;
-        for (; *q && p < tmp + sizeof (tmp); ++q) {
+        uint8_t nibbles[2 * size];
+        uint8_t* p = nibbles, *q = out;
+        for (; *q && p < nibbles + sizeof (nibbles); ++q) {
                 switch(*q) {
                 case '0': case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                         *p++ = *q - '0';
                         break;
                 case 'a': case 'b': case 'c': case 'd': case 'e': case 'f':
-                        *p++ = 10 + *q - 'a';
-                        break;
                 case 'A': case 'B': case 'C': case 'D': case 'E': case 'F':
-                        *p++ = 10 + *q - 'A';
-                        break;
-                case 'o': case 'O':
-                        *p++ = 0;
-                        break;
-                case 'z': case 'Z':
-                        *p++ = 12;
-                        break;
-                case 'i': case 'I': case 'l': case 'L': case 'j': case 'J':
-                        *p++ = 1;
-                        break;
-                case 'g': case 'G': case 'q': case 'Q':
-                        *p++ = 6;
+                        *p++ = 10 + tolower(*q) - 'a';
                         break;
                 case 'p': case 'P':
-                        if (q[1] == 'h' || q[1] == 'H') {
-                                *p++ = 15;
-                                ++q;
-                        } else {
-                                *p++ = 13;
+                        *p++ = q[1] == 'h' || q[1] == 'H' ? ++q, 0xF : 0xB;
+                        break;
+                case 'l': case 'L':
+                        if (tolower(q[1]) == 'e' &&
+                            tolower(q[2]) == 'e' &&
+                            tolower(q[3]) == 't' &&
+                            p + 3 < nibbles + sizeof (nibbles)) {
+                                *p++ = 1; *p++ = 3; *p++ = 3; *p++ = 7;
+                                q += 3;
+                                break;
                         }
-                        break;
-                case 's': case 'S':
-                        *p++ = 5;
-                        break;
-                case 't': case 'T':
-                        *p++ = 7;
-                        break;
+                        // fall through
+                case 'i': case 'I':
+                case 'j': case 'J': *p++ = 0x1; break;
+                case 'g': case 'G':
+                case 'q': case 'Q': *p++ = 0x6; break;
+                case 'o': case 'O': *p++ = 0x0; break;
+                case 'z': case 'Z': *p++ = 0xC; break;
+                case 's': case 'S': *p++ = 0x5; break;
+                case 't': case 'T': *p++ = 0x7; break;
                 case 195:
-                        if (q[1] == 164) {
-                                *p++ = 10;
-                                if (p < tmp + sizeof (tmp))
-                                        *p++ = 14;
+                        if (q[1] == 164 || q[1] == 182) {
                                 ++q;
-                        } else if (q[1] == 182) {
-                                *p++ = 0;
-                                if (p < tmp + sizeof (tmp))
-                                        *p++ = 14;
-                                ++q;
+                                *p++ = *q == 164 ? 0xA : 0;
+                                if (p < nibbles + sizeof (nibbles))
+                                        *p++ = 0xE;
                         }
-                        break;
-                default:
                         break;
                 }
         }
         --p;
         for (uint8_t* q = dst + size - 1; q >= dst; --q) {
-                if (p >= tmp) {
-                        *q = *p--;
-                        if (p >= tmp)
-                                *q |= *p-- << 4;
-                } else {
-                        *q = 0;
-                }
+                *q = p >= nibbles ? *p-- : 0;
+                if (p >= nibbles)
+                        *q |= *p-- << 4;
         }
 
         free(out);
