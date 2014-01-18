@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <idna.h>
 #include <ctype.h>
+#include <getopt.h>
 
 #define TYPE_AAAA     0x1C
 #define TYPE_ANY      0xFF
@@ -100,16 +101,40 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
         free(out);
 }
 
+static void usage(const char* prog) {
+        printf("Usage: %s [-p port] [-t ttl] ip6bits ip6prefix domain\n", prog);
+        exit(1);
+}
+
+static void die(const char* s) {
+        perror(s);
+        exit(1);
+}
+
 int main(int argc, char* argv[]) {
         setvbuf(stdout, NULL, _IONBF, 0);
 
-        if (argc != 5) {
-                printf("Usage: %s port ip6bits ip6prefix domain\n", argv[0]);
-                return 1;
+        uint16_t port = 53;
+        uint32_t ttl = 30;
+        char c;
+        while ((c = getopt (argc, argv, "p:t:")) != -1) {
+                switch (c) {
+                case 'p':
+                        port = atoi(optarg);
+                        break;
+                case 't':
+                        ttl = atoi(optarg);
+                        break;
+                default:
+                        usage(argv[0]);
+                        break;
+                }
         }
 
-        int port = atoi(argv[1]);
-        size_t bytes = atoi(argv[2]);
+        if (argc - optind != 3)
+                usage(argv[0]);
+
+        size_t bytes = atoi(argv[optind]);
         if (bytes % 8)
                 bytes += 8;
         bytes /= 8;
@@ -119,18 +144,16 @@ int main(int argc, char* argv[]) {
         }
 
         struct in6_addr prefix;
-        if (!inet_pton(AF_INET6, argv[3], &prefix)) {
+        if (!inet_pton(AF_INET6, argv[optind + 1], &prefix)) {
                 printf("Invalid IPv6 address\n");
                 return 1;
         }
 
-        const char* domain = argv[4];
+        const char* domain = argv[optind + 2];
 
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock < 0) {
-                perror("socket");
-                return 1;
-        }
+        if (sock < 0)
+                die("socket");
 
         struct sockaddr_in6 sa;
         memset(&sa, 0, sizeof (sa));
@@ -138,10 +161,8 @@ int main(int argc, char* argv[]) {
         sa.sin6_port = htons(port);
         sa.sin6_addr = in6addr_any;
 
-        if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0) {
-                perror("bind");
-                return 1;
-        }
+        if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
+                die("bind");
 
         for (;;) {
                 struct sockaddr_storage ss;
@@ -192,7 +213,6 @@ int main(int argc, char* argv[]) {
                                 uint16_t qtype = ntohs(*((uint16_t*)q));
                                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
                                 q += 4;
-                                //printf("qtype=%d qclass=%d\n", qtype, qclass);
 
                                 if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
                                         printf("Q%d %s %s\n", i, qtype == TYPE_AAAA ? "AAAA" : "ANY",  name);
@@ -210,7 +230,7 @@ int main(int argc, char* argv[]) {
                                                 s->label = htons(label | LABEL_BITS);
                                                 s->type = htons(TYPE_AAAA);
                                                 s->class = htons(qclass);
-                                                s->ttl = htonl(30);
+                                                s->ttl = htonl(ttl);
                                                 s->rdlength = htons(16);
 
                                                 memcpy(s->rdata, &prefix, bytes);

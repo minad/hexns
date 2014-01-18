@@ -11,16 +11,18 @@ stop() {
 
 start() {
     stop
-    domain=$3
-    ./hexns 3000 $1 $2 $3 >> test.log &
+    port=$1
+    ttl=$2
+    domain=$5
+    ./hexns -p $1 -t $2 $3 $4 $5 >> test.log &
     pid=$!
 }
 
 status=0
 aaaa() {
-    output=$(dig -p 3000 @127.0.0.1 $1.$domain AAAA $1.$domain A)
+    output=$(dig -p $port @127.0.0.1 $1.$domain AAAA $1.$domain A)
     echo "$output" | grep -i 'WARNING'
-    if echo "$output" | grep -P "30\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
+    if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
@@ -28,9 +30,9 @@ aaaa() {
 	status=1
     fi
 
-    output=$(dig -p 3000 @127.0.0.1 $1.$domain ANY)
+    output=$(dig -p $port @127.0.0.1 $1.$domain ANY)
     echo "$output" | grep -i 'WARNING'
-    if echo "$output" | grep -P "30\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
+    if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
@@ -38,7 +40,7 @@ aaaa() {
     fi
 
     for record in TXT MX A CNAME; do
-	output=$(dig -p 3000 @127.0.0.1 $1.$domain $record)
+	output=$(dig -p $port @127.0.0.1 $1.$domain $record)
         echo "$output" | grep -i 'WARNING'
 	if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
 	    echo -e "\nERROR Record $record found"
@@ -47,7 +49,7 @@ aaaa() {
 	fi
     done
 
-    output=$(nslookup -port=3000 -type=any $1.$domain 127.0.0.1)
+    output=$(nslookup -port=$port -type=any $1.$domain 127.0.0.1)
     echo "$output" | grep -i 'Non-authoritative'
     if echo "$output" | grep -P "has\\s+AAAA\\s+address\\s+$2\$" > /dev/null; then
 	echo -n '.'
@@ -58,7 +60,7 @@ aaaa() {
     fi
 }
 
-start 64 1:2:3:4:: kernel.org
+start 3000 10 64 1:2:3:4:: kernel.org
 aaaa dadadadadadadada 1:2:3:4:dada:dada:dada:dada
 aaaa dada.dada.dada.dada 1:2:3:4:dada:dada:dada:dada
 aaaa dadadadadadadadaabcd 1:2:3:4:dada:dada:dada:dada
@@ -83,7 +85,7 @@ aaaa leet 1:2:3:4::1337
 aaaa daleetda 1:2:3:4::da13:37da
 aaaa coooooa 1:2:3:4::c00:a
 
-start 32 a:b:: org
+start 3001 500 32 a:b:: org
 aaaa dadadadadadadada a:b::dada:dada:dada:dada
 aaaa coffee a:b::c0:ffee
 aaaa cä a:b::cae
