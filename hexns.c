@@ -1,3 +1,6 @@
+/* Hexspeak DNS server
+ * Daniel Mendler <mail@daniel-mendler.de>
+ */
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <unistd.h>
