@@ -1,4 +1,5 @@
 CC=clang
+#CC=gcc
 
 all: test
 

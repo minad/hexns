@@ -46,7 +46,7 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
         uint8_t* p = nibbles, *q = out;
         for (; *q && p < nibbles + sizeof (nibbles); ++q) {
                 switch(*q) {
-                case '0': case '1': case '2': case '3': case '4':
+                case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
                         *p++ = *q - '0';
                         break;
@@ -57,10 +57,11 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
                 case 'p': case 'P':
                         *p++ = q[1] == 'h' || q[1] == 'H' ? ++q, 0xF : 0xB;
                         break;
+                case '0': case 'o': case 'O':
+                        *p++ = 0x0;
+                        break;
                 case 'l': case 'L':
-                        if (tolower(q[1]) == 'e' &&
-                            tolower(q[2]) == 'e' &&
-                            tolower(q[3]) == 't' &&
+                        if (tolower(q[1]) == 'e' && tolower(q[2]) == 'e' && tolower(q[3]) == 't' &&
                             p + 3 < nibbles + sizeof (nibbles)) {
                                 *p++ = 1; *p++ = 3; *p++ = 3; *p++ = 7;
                                 q += 3;
@@ -69,16 +70,16 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
                         // fall through
                 case 'i': case 'I':
                 case 'j': case 'J': *p++ = 0x1; break;
-                case 'g': case 'G':
+                case 'g': case 'G': *p++ = 0x9; break;
                 case 'q': case 'Q': *p++ = 0x6; break;
-                case 'o': case 'O': *p++ = 0x0; break;
                 case 'z': case 'Z': *p++ = 0xC; break;
                 case 's': case 'S': *p++ = 0x5; break;
+                case 'r': case 'R':
                 case 't': case 'T': *p++ = 0x7; break;
                 case 195:
                         if (q[1] == 164 || q[1] == 182) {
                                 ++q;
-                                *p++ = *q == 164 ? 0xA : 0;
+                                *p++ = *q == 164 ? 0xA : 0x0;
                                 if (p < nibbles + sizeof (nibbles))
                                         *p++ = 0xE;
                         }

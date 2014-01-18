@@ -66,9 +66,12 @@ aaaa zöf 1:2:3:4::c0ef
 aaaa zöööf 1:2:3:4::c0e0:e0ef
 aaaa z.öf 1:2:3:4::c0ef
 aaaa zöph 1:2:3:4::c0ef
-aaaa zofenpeter 1:2:3:4::c0fe:be7e
+aaaa zofenpeter 1:2:3:4:0:c:feb:e7e7
+aaaa ozfenbe7erdadadadada 1:2:3:4:cfe:be7e:7dad:adad
+aaaa be7eozferdadadadada 1:2:3:4:be7e:cfe:7dad:adad
 aaaa leet 1:2:3:4::1337
 aaaa daleetda 1:2:3:4::da13:37da
+aaaa coooooa 1:2:3:4::c00:a
 
 start 32 a:b:: org
 aaaa dadadadadadadada a:b::dada:dada:dada:dada
@@ -79,6 +82,7 @@ aaaa zäf a:b::caef
 aaaa zöf a:b::c0ef
 aaaa zöööf a:b::c0e0:e0ef
 aaaa zöph a:b::c0ef
+aaaa zofenpeter a:b::c:feb:e7e7
 stop
 
 echo
