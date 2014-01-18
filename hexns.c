@@ -7,17 +7,20 @@
 #include <idna.h>
 #include <ctype.h>
 
-#define TYPE_AAAA    0x1C
-#define TYPE_ANY     0xFF
-#define CLASS_INET   0x01
-#define CLASS_CHAOS  0x03
-#define FLAG_QR      0x8000
-#define FLAG_AA      0x0400
-#define FLAG_RD      0x0100
-#define LABEL_BITS   0xC000
-#define ERROR_FORMAT 0x0001
-#define ERROR_SERVER 0x0002
-#define BUFSIZE      0x1000
+#define TYPE_AAAA     0x1C
+#define TYPE_ANY      0xFF
+#define CLASS_INET    0x01
+#define CLASS_CHAOS   0x03
+#define OP_MASK       0x7000
+#define OP_QUERY      0x0000
+#define FLAG_QR       0x8000
+#define FLAG_AA       0x0400
+#define FLAG_RD       0x0100
+#define LABEL_BITS    0xC000
+#define ERROR_FORMAT  0x0001
+#define ERROR_SERVER  0x0002
+#define ERROR_NOTIMPL 0x0004
+#define BUFSIZE       0x1000
 
 static char buf[BUFSIZE], ans[BUFSIZE];
 
@@ -153,67 +156,71 @@ int main(int argc, char* argv[]) {
                 uint16_t qdcount = ntohs(h->qdcount), ancount = 0, error = 0;
                 char *q = buf + sizeof (struct dnsheader), *qend = buf + size, *a = ans;
 
-                for (uint32_t i = 0; i < qdcount && q < qend; ++i) {
-                        uint16_t label = q - buf;
+                if ((ntohs(h->flags) & OP_MASK) != OP_QUERY) {
+                        error = ERROR_NOTIMPL;
+                } else {
+                        for (uint32_t i = 0; i < qdcount && q < qend; ++i) {
+                                uint16_t label = q - buf;
 
-                        char name[512];
-                        char* p = name, *pend = name + sizeof(name) - 1;
-                        while (q < qend && *q) {
-                                size_t n = *q++;
-                                if (n > 63) {
-                                        error = ERROR_FORMAT;
-                                        break;
-                                }
-                                if (p != name && p < pend)
-                                        *p++ = '.';
-                                size_t m = pend - p;
-                                if (m > n)
-                                        m = n;
-                                if (m > 0) {
-                                        memcpy(p, q, m);
-                                        p += m;
-                                        q += n;
-                                }
-                        }
-                        *p = 0;
-                        ++q;
-
-                        if (q + 4 > qend)
-                                error = ERROR_FORMAT;
-                        if (error)
-                                break;
-
-                        uint16_t qtype = ntohs(*((uint16_t*)q));
-                        uint16_t qclass = ntohs(*((uint16_t*)q + 1));
-                        q += 4;
-                        //printf("qtype=%d qclass=%d\n", qtype, qclass);
-
-                        if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
-                                printf("Q%d %s %s\n", i, qtype == TYPE_AAAA ? "AAAA" : "ANY",  name);
-                                char* p = strstr(name, domain);
-                                if (p && p > name && *(p-1) == '.') {
-                                        *(p-1) = 0;
-
-                                        struct dnsanswer* s = (struct dnsanswer*)a;
-                                        a += sizeof (struct dnsanswer) + 16;
-                                        if (a > ans + sizeof (ans)) {
-                                                error = ERROR_SERVER;
+                                char name[512];
+                                char* p = name, *pend = name + sizeof(name) - 1;
+                                while (q < qend && *q) {
+                                        size_t n = *q++;
+                                        if (n > 63) {
+                                                error = ERROR_FORMAT;
                                                 break;
                                         }
+                                        if (p != name && p < pend)
+                                                *p++ = '.';
+                                        size_t m = pend - p;
+                                        if (m > n)
+                                                m = n;
+                                        if (m > 0) {
+                                                memcpy(p, q, m);
+                                                p += m;
+                                                q += n;
+                                        }
+                                }
+                                *p = 0;
+                                ++q;
 
-                                        s->label = htons(label | LABEL_BITS);
-                                        s->type = htons(TYPE_AAAA);
-                                        s->class = htons(qclass);
-                                        s->ttl = htonl(30);
-                                        s->rdlength = htons(16);
+                                if (q + 4 > qend)
+                                        error = ERROR_FORMAT;
+                                if (error)
+                                        break;
 
-                                        memcpy(s->rdata, &prefix, bytes);
-                                        ip6suffix(s->rdata + bytes, 16 - bytes, name);
+                                uint16_t qtype = ntohs(*((uint16_t*)q));
+                                uint16_t qclass = ntohs(*((uint16_t*)q + 1));
+                                q += 4;
+                                //printf("qtype=%d qclass=%d\n", qtype, qclass);
 
-                                        inet_ntop(AF_INET6, s->rdata, name, sizeof (name));
-                                        printf("R%d %s\n", i, name);
+                                if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
+                                        printf("Q%d %s %s\n", i, qtype == TYPE_AAAA ? "AAAA" : "ANY",  name);
+                                        char* p = strstr(name, domain);
+                                        if (p && p > name && *(p-1) == '.') {
+                                                *(p-1) = 0;
 
-                                        ++ancount;
+                                                struct dnsanswer* s = (struct dnsanswer*)a;
+                                                a += sizeof (struct dnsanswer) + 16;
+                                                if (a > ans + sizeof (ans)) {
+                                                        error = ERROR_SERVER;
+                                                        break;
+                                                }
+
+                                                s->label = htons(label | LABEL_BITS);
+                                                s->type = htons(TYPE_AAAA);
+                                                s->class = htons(qclass);
+                                                s->ttl = htonl(30);
+                                                s->rdlength = htons(16);
+
+                                                memcpy(s->rdata, &prefix, bytes);
+                                                ip6suffix(s->rdata + bytes, 16 - bytes, name);
+
+                                                inet_ntop(AF_INET6, s->rdata, name, sizeof (name));
+                                                printf("R%d %s\n", i, name);
+
+                                                ++ancount;
+                                        }
                                 }
                         }
                 }
