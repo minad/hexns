@@ -96,6 +96,8 @@ static void ip6suffix(uint8_t* dst, size_t size, const char* name) {
 }
 
 int main(int argc, char* argv[]) {
+        setvbuf(stdout, NULL, _IONBF, 0);
+
         if (argc != 5) {
                 printf("Usage: %s port ip6bits ip6prefix domain\n", argv[0]);
                 return 1;

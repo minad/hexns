@@ -12,7 +12,7 @@ stop() {
 start() {
     stop
     domain=$3
-    ./hexns 3000 $1 $2 $3 > /dev/null &
+    ./hexns 3000 $1 $2 $3 >> test.log &
     pid=$!
 }
 
