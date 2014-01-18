@@ -46,6 +46,16 @@ aaaa() {
 	    echo -n '.'
 	fi
     done
+
+    output=$(nslookup -port=3000 -type=any $1.$domain 127.0.0.1)
+    echo "$output" | grep -i 'Non-authoritative'
+    if echo "$output" | grep -P "has\\s+AAAA\\s+address\\s+$2\$" > /dev/null; then
+	echo -n '.'
+    else
+	echo -e "\nERROR $1.$domain"
+	#echo "$output" | grep -P AAAA
+	status=1
+    fi
 }
 
 start 64 1:2:3:4:: kernel.org

@@ -12,10 +12,10 @@
 #define CLASS_INET   0x01
 #define CLASS_CHAOS  0x03
 #define FLAG_QR      0x8000
+#define FLAG_AA      0x0400
 #define LABEL_BITS   0xC000
 #define ERROR_FORMAT 0x0001
 #define ERROR_SERVER 0x0002
-#define ERROR_MASK   0x000F
 #define BUFSIZE      0x1000
 
 static char buf[BUFSIZE], ans[BUFSIZE];
@@ -231,8 +231,7 @@ int main(int argc, char* argv[]) {
                         ancount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
-
-                h->flags |= htons(FLAG_QR | error);
+                h->flags |= htons(FLAG_QR | FLAG_AA | error);
                 h->nscount = h->arcount = 0;
                 h->ancount = htons(ancount);
 
