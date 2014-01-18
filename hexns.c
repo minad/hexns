@@ -13,6 +13,7 @@
 #define CLASS_CHAOS  0x03
 #define FLAG_QR      0x8000
 #define FLAG_AA      0x0400
+#define FLAG_RD      0x0100
 #define LABEL_BITS   0xC000
 #define ERROR_FORMAT 0x0001
 #define ERROR_SERVER 0x0002
@@ -232,6 +233,7 @@ int main(int argc, char* argv[]) {
                         q = buf + sizeof (struct dnsheader);
                 }
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
+                h->flags &= ~htons(FLAG_RD);
                 h->nscount = h->arcount = 0;
                 h->ancount = htons(ancount);
 

@@ -19,7 +19,7 @@ start() {
 status=0
 aaaa() {
     output=$(dig -p 3000 @127.0.0.1 $1.$domain AAAA $1.$domain A)
-    #echo "$output" | grep -i 'WARNING'
+    echo "$output" | grep -i 'WARNING'
     if echo "$output" | grep -P "30\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
@@ -29,7 +29,7 @@ aaaa() {
     fi
 
     output=$(dig -p 3000 @127.0.0.1 $1.$domain ANY)
-    #echo "$output" | grep -i 'WARNING'
+    echo "$output" | grep -i 'WARNING'
     if echo "$output" | grep -P "30\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
@@ -39,7 +39,7 @@ aaaa() {
 
     for record in TXT MX A CNAME; do
 	output=$(dig -p 3000 @127.0.0.1 $1.$domain $record)
-        #echo "$output" | grep -i 'WARNING'
+        echo "$output" | grep -i 'WARNING'
 	if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
 	    echo -e "\nERROR Record $record found"
 	else
