@@ -104,7 +104,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ip6netmask domain\n", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ipv6netmask domain\n", prog);
         exit(1);
 }
 
@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
         uint32_t ttl = 30;
         int daemonize = 0, verbose = 0;
         char c;
-        while ((c = getopt(argc, argv, "vdp:t:")) != -1) {
+        while ((c = getopt(argc, argv, "hvdp:t:")) != -1) {
                 switch (c) {
                 case 'p':
                         port = atoi(optarg);
