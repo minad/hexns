@@ -102,6 +102,9 @@ aaaa zofenpeter a:b::c:feb:e7e7
 
 start 3001 500 a:b::/96 org
 aaaa dadadadadadadada a:b::dada:dada
+
+start 3001 500 a:b::/94 org
+aaaa dadadadadadadada a:b::dada:dada
 stop
 
 echo

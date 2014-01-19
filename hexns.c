@@ -171,12 +171,11 @@ int main(int argc, char* argv[]) {
         if (sock < 0)
                 die("socket");
 
-        struct sockaddr_in6 sa;
-        memset(&sa, 0, sizeof (sa));
-        sa.sin6_family = AF_INET6;
-        sa.sin6_port = htons(port);
-        sa.sin6_addr = in6addr_any;
-
+        struct sockaddr_in6 sa = {
+                .sin6_family = AF_INET6,
+                .sin6_port = htons(port),
+                .sin6_addr = in6addr_any
+        };
         if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
                 die("bind");
 
@@ -231,6 +230,8 @@ int main(int argc, char* argv[]) {
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
                 q += 4;
 
+                h->ancount = 0;
+
                 if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
                         printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
                         p -= strlen(domain);
@@ -269,8 +270,7 @@ int main(int argc, char* argv[]) {
                 h->flags &= ~htons(FLAG_RD);
                 h->nscount = h->arcount = 0;
 
-                size = sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen);
-                if (size < 0)
+                if (sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen) < 0)
                         perror("sendto");
         }
 }
