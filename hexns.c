@@ -1,6 +1,7 @@
 /* Hexspeak DNS server
  * Daniel Mendler <mail@daniel-mendler.de>
  */
+#define _BSD_SOURCE
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -103,7 +104,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        printf("Usage: %s [-p port] [-t ttl] ip6netmask domain\n", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ip6netmask domain\n", prog);
         exit(1);
 }
 
@@ -117,14 +118,21 @@ int main(int argc, char* argv[]) {
 
         uint16_t port = 53;
         uint32_t ttl = 30;
+        int daemonize = 0, verbose = 0;
         char c;
-        while ((c = getopt(argc, argv, "p:t:")) != -1) {
+        while ((c = getopt(argc, argv, "vdp:t:")) != -1) {
                 switch (c) {
                 case 'p':
                         port = atoi(optarg);
                         break;
                 case 't':
                         ttl = atoi(optarg);
+                        break;
+                case 'd':
+                        daemonize = 1;
+                        break;
+                case 'v':
+                        ++verbose;
                         break;
                 default:
                         usage(argv[0]);
@@ -146,7 +154,7 @@ int main(int argc, char* argv[]) {
         } else {
                 p = strstr(argv[optind], "::");
                 if (!p) {
-                        printf("Invalid netmask format, use 1:2:: or 1:2::/64\n");
+                        fprintf(stderr, "Invalid netmask format, use 1:2:: or 1:2::/64\n");
                         return 1;
                 }
                 while (p >= argv[optind]) {
@@ -155,13 +163,13 @@ int main(int argc, char* argv[]) {
                 }
         }
         if (bytes >= 16) {
-                printf("Number of prefix bits must be less than 128\n");
+                fprintf(stderr, "Number of prefix bits must be less than 128\n");
                 return 1;
         }
 
         struct in6_addr prefix;
         if (!inet_pton(AF_INET6, argv[optind], &prefix)) {
-                printf("Invalid IPv6 address\n");
+                fprintf(stderr, "Invalid IPv6 address\n");
                 return 1;
         }
 
@@ -188,6 +196,9 @@ int main(int argc, char* argv[]) {
                 if (setuid(pw->pw_uid))
                         die("setuid");
         }
+
+        if (daemonize && daemon(0, 0) < 0)
+                perror("daemon");
 
         for (;;) {
                 struct sockaddr_storage ss;
@@ -233,7 +244,8 @@ int main(int argc, char* argv[]) {
                 h->ancount = 0;
 
                 if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
-                        printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
+                        if (verbose > 0)
+                                printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
                         p -= strlen(domain);
                         if (p > name + 1 && !strcmp(p, domain)) {
                                 *p = 0;
@@ -255,7 +267,8 @@ int main(int argc, char* argv[]) {
                                 suffix1337(a->rdata + bytes, 16 - bytes, name);
 
                                 inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
-                                printf("R AAAA %s\n", name);
+                                if (verbose > 0)
+                                        printf("R AAAA %s\n", name);
 
                                 h->ancount = htons(1);
                         }
@@ -263,6 +276,8 @@ int main(int argc, char* argv[]) {
 
         error:
                 if (error) {
+                        if (verbose > 0)
+                                printf("E %d\n", error);
                         h->ancount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }

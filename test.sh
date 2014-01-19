@@ -14,7 +14,7 @@ start() {
     port=$1
     ttl=$2
     domain=$4
-    ./hexns -p $1 -t $2 $3 $4 >> test.log &
+    ./hexns -vp $1 -t $2 $3 $4 >> test.log &
     pid=$!
 }
 
@@ -60,6 +60,7 @@ aaaa() {
     fi
 }
 
+rm test.log
 start 3000 10 1:2:3:4:: kernel.org
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1:2:3:4:aaaa:aaaa:aaaa:aaaa
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddd 1:2:3:4:aaaa:aaaa:aaaa:aaaa
