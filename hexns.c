@@ -83,9 +83,9 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
                 case 'r':
                 case 't': *p++ = 0x7; break;
                 case 195:
-                        if (q[1] == 164 || q[1] == 182) {
+                        if (q[1] == 164 || q[1] == 132 || q[1] == 182 || q[1] == 150) {
                                 ++q;
-                                *p++ = *q == 164 ? 0xA : 0x0;
+                                *p++ = *q == 164 || *q == 132 ? 0xA : 0x0;
                                 if (p < nibs + sizeof (nibs))
                                         *p++ = 0xE;
                         }

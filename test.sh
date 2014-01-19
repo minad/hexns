@@ -96,6 +96,7 @@ aaaa zö a:b::c0e
 aaaa zäf a:b::caef
 aaaa zöf a:b::c0ef
 aaaa ZÖF a:b::c0ef
+aaaa ZÄF a:b::caef
 aaaa zöööf a:b::c0e0:e0ef
 aaaa zöph a:b::c0ef
 aaaa zofenpeter a:b::c:feb:e7e7
