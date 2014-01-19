@@ -26,7 +26,7 @@
 #define ERROR_NOTIMPL 0x0004
 #define BUFSIZE       0x400
 
-static char buf[BUFSIZE], ans[BUFSIZE];
+static char buf[BUFSIZE];
 
 struct dnsheader {
         uint16_t id;
@@ -213,14 +213,19 @@ int main(int argc, char* argv[]) {
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
                 q += 4;
 
-                size_t ansize = 0;
                 if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
                         printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
                         char* p = strstr(name, domain);
                         if (p && p > name && *(p-1) == '.') {
                                 *(p-1) = 0;
 
-                                struct dnsanswer* a = (struct dnsanswer*)ans;
+                                struct dnsanswer* a = (struct dnsanswer*)q;
+                                q += sizeof (struct dnsanswer) + 16;
+                                if (q > buf + sizeof (buf)) {
+                                        error = ERROR_SERVER;
+                                        goto error;
+                                }
+
                                 a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
                                 a->type = htons(TYPE_AAAA);
                                 a->class = htons(qclass);
@@ -234,17 +239,9 @@ int main(int argc, char* argv[]) {
                                 printf("R AAAA %s\n", name);
 
                                 h->ancount = htons(1);
-                                ansize = sizeof (struct dnsanswer) + 16;
                         }
                 }
 
-                if (q + ansize < buf + sizeof (buf)) {
-                        memcpy(q, ans, ansize);
-                        q += ansize;
-                } else {
-                        error = ERROR_SERVER;
-                        goto error;
-                }
         error:
                 if (error) {
                         h->ancount = 0;
