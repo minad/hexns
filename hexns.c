@@ -24,9 +24,8 @@
 #define ERROR_FORMAT  0x0001
 #define ERROR_SERVER  0x0002
 #define ERROR_NOTIMPL 0x0004
-#define BUFSIZE       0x400
 
-static char buf[BUFSIZE];
+static char buf[0x400];
 
 struct dnsheader {
         uint16_t id;
@@ -186,20 +185,15 @@ int main(int argc, char* argv[]) {
                 char* p = name, *pend = name + sizeof(name) - 1;
                 while (q < qend && *q) {
                         size_t n = *q++;
-                        if (n > 63) {
+                        if (n > 63 || p + n + 1 > pend) {
                                 error = ERROR_FORMAT;
                                 goto error;
                         }
-                        if (p != name && p < pend)
+                        if (p != name)
                                 *p++ = '.';
-                        size_t m = pend - p;
-                        if (m > n)
-                                m = n;
-                        if (m > 0) {
-                                memcpy(p, q, m);
-                                p += m;
-                                q += n;
-                        }
+                        memcpy(p, q, n);
+                        p += n;
+                        q += n;
                 }
                 *p = 0;
                 ++q;
