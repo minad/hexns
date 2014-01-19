@@ -10,6 +10,7 @@
 #include <idna.h>
 #include <ctype.h>
 #include <getopt.h>
+#include <pwd.h>
 
 #define TYPE_AAAA     0x1C
 #define TYPE_ANY      0xFF
@@ -163,6 +164,16 @@ int main(int argc, char* argv[]) {
 
         if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
                 die("bind");
+
+        if (!getuid()) {
+                struct passwd* pw = getpwnam("nobody");
+                if (!pw)
+                        die("getpwnam");
+                if (setgid(pw->pw_gid))
+                        die("setgid");
+                if (setuid(pw->pw_uid))
+                        die("setuid");
+        }
 
         for (;;) {
                 struct sockaddr_storage ss;
