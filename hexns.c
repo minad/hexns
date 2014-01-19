@@ -266,9 +266,10 @@ int main(int argc, char* argv[]) {
                                 memcpy(a->rdata, &prefix, bytes);
                                 suffix1337(a->rdata + bytes, 16 - bytes, name);
 
-                                inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
-                                if (verbose > 0)
+                                if (verbose > 0) {
+                                        inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
                                         printf("R AAAA %s\n", name);
+                                }
 
                                 h->ancount = htons(1);
                         }
