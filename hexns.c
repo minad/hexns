@@ -181,8 +181,7 @@ int main(int argc, char* argv[]) {
                 }
 
                 char name[512];
-                char *q = buf + sizeof (struct dnsheader), *qend = buf + size;
-                char* p = name;
+                char *q = buf + sizeof (struct dnsheader), *qend = buf + size, *p = name;
                 size_t n;
                 while (q < qend && (n = *q++)) {
                         if (n > 63 || p + n + 1 > name + sizeof(name) - 1) {
@@ -208,9 +207,9 @@ int main(int argc, char* argv[]) {
 
                 if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
                         printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
-                        char* p = strstr(name, domain);
-                        if (p && p > name && p[-1] == '.') {
-                                p[-1] = 0;
+                        p -= strlen(domain);
+                        if (p > name + 1 && !strcmp(p, domain)) {
+                                *p = 0;
 
                                 struct dnsanswer* a = (struct dnsanswer*)q;
                                 q += sizeof (struct dnsanswer) + 16;
