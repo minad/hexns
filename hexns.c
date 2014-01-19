@@ -103,7 +103,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        printf("Usage: %s [-p port] [-t ttl] ip6bits ip6prefix domain\n", prog);
+        printf("Usage: %s [-p port] [-t ttl] ip6netmask domain\n", prog);
         exit(1);
 }
 
@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
         uint16_t port = 53;
         uint32_t ttl = 30;
         char c;
-        while ((c = getopt (argc, argv, "p:t:")) != -1) {
+        while ((c = getopt(argc, argv, "p:t:")) != -1) {
                 switch (c) {
                 case 'p':
                         port = atoi(optarg);
@@ -132,25 +132,40 @@ int main(int argc, char* argv[]) {
                 }
         }
 
-        if (argc - optind != 3)
+        if (argc - optind != 2)
                 usage(argv[0]);
 
-        size_t bytes = atoi(argv[optind]);
-        if (bytes % 8)
-                bytes += 8;
-        bytes /= 8;
+        char* p = strchr(argv[optind], '/');
+        size_t bytes = 0;
+        if (p) {
+                *p++ = 0;
+                bytes = atoi(p);
+                if (bytes % 8)
+                        bytes += 8;
+                bytes /= 8;
+        } else {
+                p = strstr(argv[optind], "::");
+                if (!p) {
+                        printf("Invalid netmask format, use 1:2:: or 1:2::/64\n");
+                        return 1;
+                }
+                while (p >= argv[optind]) {
+                        if (*p-- == ':')
+                                bytes += 2;
+                }
+        }
         if (bytes >= 16) {
                 printf("Number of prefix bits must be less than 128\n");
                 return 1;
         }
 
         struct in6_addr prefix;
-        if (!inet_pton(AF_INET6, argv[optind + 1], &prefix)) {
+        if (!inet_pton(AF_INET6, argv[optind], &prefix)) {
                 printf("Invalid IPv6 address\n");
                 return 1;
         }
 
-        const char* domain = argv[optind + 2];
+        const char* domain = argv[optind + 1];
 
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
         if (sock < 0)
