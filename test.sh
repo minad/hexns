@@ -83,7 +83,7 @@ aaaa() {
     fi
 }
 
-rm test.log
+rm -f test.log
 start 3000 10 1:2:3:4::180 kernel.org laber.org
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1:2:3:4:aaaa:aaaa:aaaa:aaaa
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddd 1:2:3:4:aaaa:aaaa:aaaa:aaaa
