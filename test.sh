@@ -131,6 +131,14 @@ aaaa dadadadadadadada a:b::dada:dada
 start 3001 500 a:b::/94 org y
 aaaa dadadadadadadada a:b::dada:dada
 
+output=$(dig -p $port @127.0.0.1 unknowndomain AAAA)
+echo "$output" | grep -i 'WARNING'
+if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
+    echo -e "\nERROR Record AAAA found"
+else
+    echo -n '.'
+fi
+
 output=$(dig -p $port @127.0.0.1 test$domain AAAA)
 echo "$output" | grep -i 'WARNING'
 if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
