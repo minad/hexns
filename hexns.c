@@ -248,7 +248,7 @@ int main(int argc, char* argv[]) {
                                 printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
                         for (char** d = domains; *d; ++d) {
                                 char* r = p - strlen(*d);
-                                if (r == name || (r > name && r[-1] == '.' && !strcmp(r, *d))) {
+                                if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
                                         struct dnsanswer* a = (struct dnsanswer*)q;
                                         q += sizeof (struct dnsanswer) + 16;
                                         if (q > buf + sizeof (buf)) {
