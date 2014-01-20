@@ -14,7 +14,8 @@ start() {
     port=$1
     ttl=$2
     domain=$4
-    ./hexns -vp $1 -t $2 $3 $4 >> test.log &
+    domain2=$5
+    ./hexns -vp $1 -t $2 $3 $4 $5 >> test.log &
     pid=$!
 }
 
@@ -27,6 +28,16 @@ aaaa() {
     else
 	echo -e "\nERROR $1.$domain"
 	#echo "$output" | grep -P AAAA
+	status=1
+    fi
+
+    output=$(dig -p $port @127.0.0.1 $1.$domain2 AAAA $1.$domain2 A)
+    echo "$output" | grep -i 'WARNING'
+    if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
+	echo -n '.'
+    else
+	echo -e "\nERROR $1.$domain2"
+	echo "$output" | grep -P AAAA
 	status=1
     fi
 
@@ -61,7 +72,7 @@ aaaa() {
 }
 
 rm test.log
-start 3000 10 1:2:3:4:: kernel.org
+start 3000 10 1:2:3:4:: kernel.org laber.org
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1:2:3:4:aaaa:aaaa:aaaa:aaaa
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddd 1:2:3:4:aaaa:aaaa:aaaa:aaaa
 aaaa dadadadadadadada 1:2:3:4:dada:dada:dada:dada
@@ -89,7 +100,7 @@ aaaa leet 1:2:3:4::1337
 aaaa daleetda 1:2:3:4::da13:37da
 aaaa coooooa 1:2:3:4::c00:a
 
-start 3001 500 a:b:: org
+start 3001 500 a:b:: org du
 aaaa dadadadadadadada a:b::dada:dada:dada:dada
 aaaa coffee a:b::c0:ffee
 aaaa cä a:b::cae
@@ -102,10 +113,10 @@ aaaa zöööf a:b::c0e0:e0ef
 aaaa zöph a:b::c0ef
 aaaa zofenpeter a:b::c:feb:e7e7
 
-start 3001 500 a:b::/96 org
+start 3001 500 a:b::/96 org x
 aaaa dadadadadadadada a:b::dada:dada
 
-start 3001 500 a:b::/94 org
+start 3001 500 a:b::/94 org y
 aaaa dadadadadadadada a:b::dada:dada
 stop
 

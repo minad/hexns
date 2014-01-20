@@ -104,7 +104,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ipv6netmask domain\n", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ipv6netmask domains...\n", prog);
         exit(1);
 }
 
@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
                 }
         }
 
-        if (argc - optind != 2)
+        if (argc - optind < 2)
                 usage(argv[0]);
 
         char* p = strchr(argv[optind], '/');
@@ -173,7 +173,7 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        const char* domain = argv[optind + 1];
+        char** domains = argv + optind + 1;
 
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
         if (sock < 0)
@@ -246,32 +246,35 @@ int main(int argc, char* argv[]) {
                 if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
                         if (verbose > 0)
                                 printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
-                        p -= strlen(domain);
-                        if (p > name + 1 && !strcmp(p, domain)) {
-                                *p = 0;
+                        for (char** d = domains; *d; ++d) {
+                                char* r = p - strlen(*d);
+                                if (r > name + 1 && !strcmp(r, *d)) {
+                                        *r = 0;
 
-                                struct dnsanswer* a = (struct dnsanswer*)q;
-                                q += sizeof (struct dnsanswer) + 16;
-                                if (q > buf + sizeof (buf)) {
-                                        error = ERROR_SERVER;
-                                        goto error;
+                                        struct dnsanswer* a = (struct dnsanswer*)q;
+                                        q += sizeof (struct dnsanswer) + 16;
+                                        if (q > buf + sizeof (buf)) {
+                                                error = ERROR_SERVER;
+                                                goto error;
+                                        }
+
+                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
+                                        a->type = htons(TYPE_AAAA);
+                                        a->class = htons(qclass);
+                                        a->ttl = htonl(ttl);
+                                        a->rdlength = htons(16);
+
+                                        memcpy(a->rdata, &prefix, bytes);
+                                        suffix1337(a->rdata + bytes, 16 - bytes, name);
+
+                                        if (verbose > 0) {
+                                                inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
+                                                printf("R AAAA %s\n", name);
+                                        }
+
+                                        h->ancount = htons(1);
+                                        break;
                                 }
-
-                                a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
-                                a->type = htons(TYPE_AAAA);
-                                a->class = htons(qclass);
-                                a->ttl = htonl(ttl);
-                                a->rdlength = htons(16);
-
-                                memcpy(a->rdata, &prefix, bytes);
-                                suffix1337(a->rdata + bytes, 16 - bytes, name);
-
-                                if (verbose > 0) {
-                                        inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
-                                        printf("R AAAA %s\n", name);
-                                }
-
-                                h->ancount = htons(1);
                         }
                 }
 
