@@ -104,7 +104,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ipv6netmask domains...\n", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ipv6addr domains...\n", prog);
         exit(1);
 }
 
@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
         } else {
                 p = strstr(argv[optind], "::");
                 if (!p) {
-                        fprintf(stderr, "Invalid netmask format, use 1:2:: or 1:2::/64\n");
+                        fprintf(stderr, "Invalid address format, use 1:2::1 or 1:2::/64\n");
                         return 1;
                 }
                 while (p >= argv[optind]) {
@@ -163,12 +163,12 @@ int main(int argc, char* argv[]) {
                 }
         }
         if (bytes >= 16) {
-                fprintf(stderr, "Number of prefix bits must be less than 128\n");
+                fprintf(stderr, "Number of netmask bits must be less than 128\n");
                 return 1;
         }
 
-        struct in6_addr prefix;
-        if (!inet_pton(AF_INET6, argv[optind], &prefix)) {
+        struct in6_addr addr;
+        if (!inet_pton(AF_INET6, argv[optind], &addr)) {
                 fprintf(stderr, "Invalid IPv6 address\n");
                 return 1;
         }
@@ -248,9 +248,7 @@ int main(int argc, char* argv[]) {
                                 printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
                         for (char** d = domains; *d; ++d) {
                                 char* r = p - strlen(*d);
-                                if (r > name + 1 && !strcmp(r, *d)) {
-                                        *r = 0;
-
+                                if (r == name || (r > name && r[-1] == '.' && !strcmp(r, *d))) {
                                         struct dnsanswer* a = (struct dnsanswer*)q;
                                         q += sizeof (struct dnsanswer) + 16;
                                         if (q > buf + sizeof (buf)) {
@@ -264,8 +262,13 @@ int main(int argc, char* argv[]) {
                                         a->ttl = htonl(ttl);
                                         a->rdlength = htons(16);
 
-                                        memcpy(a->rdata, &prefix, bytes);
-                                        suffix1337(a->rdata + bytes, 16 - bytes, name);
+                                        if (r == name) {
+                                                memcpy(a->rdata, &addr, 16);
+                                        } else {
+                                                *r = 0;
+                                                memcpy(a->rdata, &addr, bytes);
+                                                suffix1337(a->rdata + bytes, 16 - bytes, name);
+                                        }
 
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, a->rdata, name, sizeof (name));

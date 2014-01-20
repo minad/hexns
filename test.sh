@@ -13,10 +13,22 @@ start() {
     stop
     port=$1
     ttl=$2
+    addr=$3
     domain=$4
     domain2=$5
     ./hexns -vp $1 -t $2 $3 $4 $5 >> test.log &
     pid=$!
+
+    output=$(dig -p $port @127.0.0.1 $domain AAAA)
+    #echo "$output"
+    echo "$output" | grep -i 'WARNING'
+    if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+${addr%/*}\$" > /dev/null; then
+	echo -n '.'
+    else
+	echo -e "\nERROR $domain"
+	#echo "$output" | grep -P AAAA
+	status=1
+    fi
 }
 
 status=0
@@ -72,7 +84,7 @@ aaaa() {
 }
 
 rm test.log
-start 3000 10 1:2:3:4:: kernel.org laber.org
+start 3000 10 1:2:3:4::180 kernel.org laber.org
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa 1:2:3:4:aaaa:aaaa:aaaa:aaaa
 aaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddd 1:2:3:4:aaaa:aaaa:aaaa:aaaa
 aaaa dadadadadadadada 1:2:3:4:dada:dada:dada:dada
@@ -118,6 +130,15 @@ aaaa dadadadadadadada a:b::dada:dada
 
 start 3001 500 a:b::/94 org y
 aaaa dadadadadadadada a:b::dada:dada
+
+output=$(dig -p $port @127.0.0.1 test$domain AAAA)
+echo "$output" | grep -i 'WARNING'
+if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
+    echo -e "\nERROR Record AAAA found"
+else
+    echo -n '.'
+fi
+
 stop
 
 echo
