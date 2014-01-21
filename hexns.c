@@ -13,10 +13,7 @@
 #include <getopt.h>
 #include <pwd.h>
 
-#define TYPE_AAAA     0x1C
-#define TYPE_ANY      0xFF
 #define CLASS_INET    0x01
-#define CLASS_CHAOS   0x03
 #define OP_MASK       0x7000
 #define OP_QUERY      0x0000
 #define FLAG_QR       0x8000
@@ -26,6 +23,17 @@
 #define ERROR_FORMAT  0x0001
 #define ERROR_SERVER  0x0002
 #define ERROR_NOTIMPL 0x0004
+
+enum {
+        TYPE_A     = 1,
+        TYPE_NS    = 2,
+        TYPE_CNAME = 5,
+        TYPE_SOA   = 6,
+        TYPE_MX    = 15,
+        TYPE_TXT   = 16,
+        TYPE_AAAA  = 28,
+        TYPE_ANY   = 255,
+};
 
 static char buf[0x400];
 
@@ -46,6 +54,23 @@ struct dnsanswer {
         uint16_t rdlength;
         uint8_t  rdata[0];
 } __attribute__ ((packed));
+
+static const char* type2str(uint16_t type) {
+        static char buffer[32];
+        switch (type) {
+        case TYPE_A:     return "A";
+        case TYPE_NS:    return "NS";
+        case TYPE_CNAME: return "CNAME";
+        case TYPE_MX:    return "MX";
+        case TYPE_TXT:   return "TXT";
+        case TYPE_SOA:   return "SOA";
+        case TYPE_AAAA:  return "AAAA";
+        case TYPE_ANY:   return "ANY";
+        default:
+                snprintf(buffer, sizeof (buffer), "%d", type);
+                return buffer;
+        }
+}
 
 static void suffix1337(uint8_t* dst, size_t size, const char* name) {
         uint8_t* out;
@@ -241,14 +266,20 @@ int main(int argc, char* argv[]) {
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
                 q += 4;
 
+                if (qclass != CLASS_INET) {
+                        error = ERROR_NOTIMPL;
+                        goto error;
+                }
+
                 h->ancount = 0;
 
-                if (qclass == CLASS_INET && (qtype == TYPE_AAAA || qtype == TYPE_ANY)) {
-                        if (verbose > 0)
-                                printf("Q %s %s\n", qtype == TYPE_AAAA ? "AAAA" : "ANY ",  name);
-                        for (char** d = domains; *d; ++d) {
-                                char* r = p - strlen(*d);
-                                if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
+                if (verbose > 0)
+                        printf("Q %-5s %s\n", type2str(qtype),  name);
+
+                for (char** d = domains; *d; ++d) {
+                        char* r = p - strlen(*d);
+                        if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
+                                if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
                                         struct dnsanswer* a = (struct dnsanswer*)q;
                                         q += sizeof (struct dnsanswer) + 16;
                                         if (q > buf + sizeof (buf)) {
@@ -272,12 +303,12 @@ int main(int argc, char* argv[]) {
 
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
-                                                printf("R AAAA %s\n", name);
+                                                printf("R AAAA  %s\n", name);
                                         }
 
                                         h->ancount = htons(1);
-                                        break;
                                 }
+                                break;
                         }
                 }
 
