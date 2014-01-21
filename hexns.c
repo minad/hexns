@@ -161,22 +161,30 @@ static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         return dns;
 }
 
-static char* answer_aaaa(char* q, size_t prefix, const void* addr, uint32_t ttl, const char* name, uint16_t label) {
-        struct dnsanswer* a = (struct dnsanswer*)q;
-        q += sizeof (struct dnsanswer) + 16;
-        if (q > buf + sizeof (buf))
+static struct dnsanswer* answer(char** q, uint16_t label, uint8_t type, uint32_t ttl, uint16_t rdlength) {
+        struct dnsanswer* a = (struct dnsanswer*)*q;
+        *q += sizeof (struct dnsanswer) + rdlength;
+        if (*q > buf + sizeof (buf))
                 return 0;
-
         a->label = htons(label | LABEL_BITS);
-        a->type = htons(TYPE_AAAA);
+        a->type = htons(type);
         a->class = htons(CLASS_INET);
         a->ttl = htonl(ttl);
-        a->rdlength = htons(16);
+        a->rdlength = htons(rdlength);
+        return a;
+}
+
+static struct dnsanswer* answer_aaaa(char** q, size_t prefix, const void* addr, uint32_t ttl, const char* name, uint16_t label) {
+        struct dnsanswer* a = answer(q, label, TYPE_AAAA, ttl, 16);
+        if (!a)
+                return 0;
         memcpy(a->rdata, addr, 16);
         if (name)
                 suffix1337(a->rdata + prefix, 16 - prefix, name);
-        return q;
+        return a;
 }
+
+#define ASSUME(cond, e) if (!(cond)) { error = ERROR_##e; goto error; }
 
 int main(int argc, char* argv[]) {
         setvbuf(stdout, NULL, _IONBF, 0);
@@ -279,26 +287,17 @@ int main(int argc, char* argv[]) {
 
                 struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t error = 0;
-                if ((ntohs(h->flags) & OP_MASK) != OP_QUERY || ntohs(h->qdcount) != 1) {
-                        error = ERROR_NOTIMPL;
-                        goto error;
-                }
+                ASSUME((ntohs(h->flags) & OP_MASK) == OP_QUERY && ntohs(h->qdcount) == 1, NOTIMPL);
 
                 char name[512];
                 char *q = dns2str(name, sizeof(name), buf + sizeof (struct dnsheader), buf + size);
-                if (!q || q + 4 > buf + size) {
-                        error = ERROR_FORMAT;
-                        goto error;
-                }
+                ASSUME(q && q + 4 <= buf + size, FORMAT);
 
                 uint16_t qtype = ntohs(*((uint16_t*)q));
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
                 q += 4;
 
-                if (qclass != CLASS_INET) {
-                        error = ERROR_NOTIMPL;
-                        goto error;
-                }
+                ASSUME(qclass == CLASS_INET, NOTIMPL);
 
                 if (verbose > 0)
                         printf("Q %-5s %s\n", type2str(qtype),  name);
@@ -313,11 +312,7 @@ int main(int argc, char* argv[]) {
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
                                         if (r > name)
                                                 *r = 0;
-                                        q = answer_aaaa(q, prefix, &addr, ttl, r > name ? name : 0, sizeof(struct dnsheader));
-                                        if (!q) {
-                                                error = ERROR_SERVER;
-                                                goto error;
-                                        }
+                                        ASSUME(answer_aaaa(&q, prefix, &addr, ttl, r > name ? name : 0, sizeof(struct dnsheader)), SERVER);
 
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
@@ -330,20 +325,9 @@ int main(int argc, char* argv[]) {
                                 for (int j = 0; j < 2; ++j) {
                                         if (j == 1 || (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY))) {
                                                 for (int i = 0; i < nscount; ++i) {
-                                                        struct dnsanswer* a = (struct dnsanswer*)q;
                                                         size_t len = nslabel[i] ? 2 : strlen(ns[i]) + 3;
-
-                                                        q += sizeof (struct dnsanswer) + len;
-                                                        if (q > buf + sizeof (buf)) {
-                                                                error = ERROR_SERVER;
-                                                                goto error;
-                                                        }
-
-                                                        a->label = htons(domainlabel | LABEL_BITS);
-                                                        a->type = htons(TYPE_NS);
-                                                        a->class = htons(CLASS_INET);
-                                                        a->ttl = htonl(ttl);
-                                                        a->rdlength = htons(len);
+                                                        struct dnsanswer* a = answer(&q, domainlabel, TYPE_NS, ttl, len);
+                                                        ASSUME(q, SERVER);
 
                                                         if (nslabel[i]) {
                                                                 *((uint16_t*)a->rdata) = htons(nslabel[i] | LABEL_BITS);
@@ -362,13 +346,8 @@ int main(int argc, char* argv[]) {
                                                 }
                                         }
                                 }
-                                for (int i = 0; i < nscount; ++i) {
-                                        q = answer_aaaa(q, prefix, &addr, ttl, ns[i], nslabel[i]);
-                                        if (!q) {
-                                                error = ERROR_SERVER;
-                                                goto error;
-                                        }
-                                }
+                                for (int i = 0; i < nscount; ++i)
+                                        ASSUME(answer_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
                                 break;
                         }
                 }
