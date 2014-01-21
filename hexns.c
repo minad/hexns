@@ -161,7 +161,7 @@ static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         return dns;
 }
 
-static ssize_t str2dns(char* dns, size_t size, const char* str) {
+static ssize_t str2dns(char* dns, size_t size, const char* str, uint16_t dnslabel) {
         char* p = dns;
         while (*str) {
                 char* q = strchr(str, '.');
@@ -173,17 +173,18 @@ static ssize_t str2dns(char* dns, size_t size, const char* str) {
                 str += n + 1;
                 p += n;
         }
+        //*((uint16_t*)p) = htons(dnslabel | LABEL_BITS);
+        //p += 2;
         *p++ = 0;
         return p - dns;
 }
 
-char* answer_aaaa(char* q, size_t bytes, const void* addr, const char* name, uint16_t label) {
+static char* answer_aaaa(char* q, size_t prefix, const void* addr, uint32_t ttl, const char* name, uint16_t label) {
         struct dnsanswer* a = (struct dnsanswer*)q;
         q += sizeof (struct dnsanswer) + 16;
         if (q > buf + sizeof (buf))
                 return 0;
 
-        int ttl=30;
         a->label = htons(label | LABEL_BITS);
         a->type = htons(TYPE_AAAA);
         a->class = htons(CLASS_INET);
@@ -191,7 +192,7 @@ char* answer_aaaa(char* q, size_t bytes, const void* addr, const char* name, uin
         a->rdlength = htons(16);
         memcpy(a->rdata, addr, 16);
         if (name)
-                suffix1337(a->rdata + bytes, 16 - bytes, name);
+                suffix1337(a->rdata + prefix, 16 - prefix, name);
         return q;
 }
 
@@ -233,23 +234,23 @@ int main(int argc, char* argv[]) {
                 usage(argv[0]);
 
         char* p = strchr(argv[optind], '/');
-        size_t bytes = 0;
+        size_t prefix = 0;
         if (p) {
                 *p++ = 0;
-                bytes = atoi(p);
-                if (bytes % 8)
-                        bytes += 8;
-                bytes /= 8;
+                prefix = atoi(p);
+                if (prefix % 8)
+                        prefix += 8;
+                prefix /= 8;
         } else {
                 p = strstr(argv[optind], "::");
                 if (!p)
                         fatal("Invalid address format, use 1:2::1 or 1:2::/64\n");
                 while (p >= argv[optind]) {
                         if (*p-- == ':')
-                                bytes += 2;
+                                prefix += 2;
                 }
         }
-        if (bytes >= 16)
+        if (prefix >= 16)
                 fatal("Number of netmask bits must be less than 128\n");
 
         struct in6_addr addr;
@@ -323,10 +324,12 @@ int main(int argc, char* argv[]) {
                 for (char** d = domains; *d; ++d) {
                         char* r = name + strlen(name) - strlen(*d);
                         if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
+                                uint16_t domainlabel = sizeof(struct dnsheader) + (r - name);
+
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
                                         if (r > name)
                                                 *r = 0;
-                                        q = answer_aaaa(q, bytes, &addr, r > name ? name : 0, sizeof(struct dnsheader));
+                                        q = answer_aaaa(q, prefix, &addr, ttl, r > name ? name : 0, sizeof(struct dnsheader));
                                         if (!q) {
                                                 error = ERROR_SERVER;
                                                 goto error;
@@ -341,19 +344,19 @@ int main(int argc, char* argv[]) {
                                 }
                                 uint16_t nslabel[MAX_NS] = {0};
                                 for (int j = 0; j < 2; ++j) {
-                                        if (j == 1 || qtype == TYPE_NS || qtype == TYPE_ANY) {
+                                        if (j == 1 || (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY))) {
                                                 for (int i = 0; i < nscount; ++i) {
-                                                        char tmp[512], nsname[512];
+                                                        char nsname[512];
 
                                                         struct dnsanswer* a = (struct dnsanswer*)q;
                                                         ssize_t len;
                                                         if (nslabel[i]) {
                                                                 len = 2;
                                                         } else {
-                                                                strncpy(tmp, ns[i], sizeof(tmp) - 1);
-                                                                strncat(tmp, ".", sizeof(tmp) - 1);
-                                                                strncat(tmp, *d, sizeof(tmp) - 1);
-                                                                len = str2dns(nsname, sizeof(nsname), tmp);
+                                                                strncpy(name, ns[i], sizeof(name) - 1);
+                                                                strncat(name, ".", sizeof(name) - 1);
+                                                                strncat(name, *d, sizeof(name) - 1);
+                                                                len = str2dns(nsname, sizeof(nsname), name, domainlabel);
                                                                 if (len < 0) {
                                                                         error = ERROR_SERVER;
                                                                         goto error;
@@ -366,7 +369,7 @@ int main(int argc, char* argv[]) {
                                                                 goto error;
                                                         }
 
-                                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
+                                                        a->label = htons(domainlabel | LABEL_BITS);
                                                         a->type = htons(TYPE_NS);
                                                         a->class = htons(qclass);
                                                         a->ttl = htonl(ttl);
@@ -379,15 +382,19 @@ int main(int argc, char* argv[]) {
                                                         }
 
                                                         if (j == 0) {
-                                                                if (verbose > 0)
-                                                                        printf("R NS    %s\n", tmp);
+                                                                if (verbose > 0) {
+                                                                        strncpy(name, ns[i], sizeof(name) - 1);
+                                                                        strncat(name, ".", sizeof(name) - 1);
+                                                                        strncat(name, *d, sizeof(name) - 1);
+                                                                        printf("R NS    %s\n", name);
+                                                                }
                                                                 ++ancount;
                                                         }
                                                 }
                                         }
                                 }
                                 for (int i = 0; i < nscount; ++i) {
-                                        q = answer_aaaa(q, bytes, &addr, ns[i], nslabel[i]);
+                                        q = answer_aaaa(q, prefix, &addr, ttl, ns[i], nslabel[i]);
                                         if (!q) {
                                                 error = ERROR_SERVER;
                                                 goto error;
