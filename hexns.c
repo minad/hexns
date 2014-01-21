@@ -23,7 +23,7 @@
 #define ERROR_FORMAT  0x0001
 #define ERROR_SERVER  0x0002
 #define ERROR_NOTIMPL 0x0004
-
+#define MAX_NS        4
 enum {
         TYPE_A     = 1,
         TYPE_NS    = 2,
@@ -128,9 +128,16 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
         free(out);
 }
 
-static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-n ns] ipv6addr domains...\n", prog);
+static void fatal(const char* fmt, ...) {
+        va_list ap;
+        va_start(ap, fmt);
+        vfprintf(stderr, fmt, ap);
+        va_end(ap);
         exit(1);
+}
+
+static void usage(const char* prog) {
+        fatal("Usage: %s [-d] [-p port] [-t ttl] [-n ns] ipv6addr domains...\n", prog);
 }
 
 static void die(const char* s) {
@@ -138,20 +145,36 @@ static void die(const char* s) {
         exit(1);
 }
 
-static char* dns2str(char* name, size_t size, char* in, const char* end) {
+static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         size_t n;
-        char* p = name;
-        while (in < end && (n = *in++)) {
-                if (n > 63 || p + n + 1 > name + size - 1)
+        char* p = str;
+        while (dns < end && (n = *dns++)) {
+                if (n > 63 || p + n + 1 > str + size - 1)
                         return 0;
-                if (p != name)
+                if (p != str)
                         *p++ = '.';
-                memcpy(p, in, n);
+                memcpy(p, dns, n);
                 p += n;
-                in += n;
+                dns += n;
         }
         *p = 0;
-        return in;
+        return dns;
+}
+
+static ssize_t str2dns(char* dns, size_t size, const char* str) {
+        char* p = dns;
+        while (*str) {
+                char* q = strchr(str, '.');
+                size_t n = q ? q - str : strlen(str);
+                if (p + 2 + n > dns + size)
+                        return -1;
+                *p++ = n;
+                memcpy(p, str, n);
+                str += n + 1;
+                p += n;
+        }
+        *p++ = 0;
+        return p - dns;
 }
 
 int main(int argc, char* argv[]) {
@@ -161,6 +184,8 @@ int main(int argc, char* argv[]) {
         uint32_t ttl = 30;
         int daemonize = 0, verbose = 0;
         char c;
+        char* ns[MAX_NS];
+        int nscount = 0;
         while ((c = getopt(argc, argv, "hvdp:t:n:")) != -1) {
                 switch (c) {
                 case 'p':
@@ -174,6 +199,11 @@ int main(int argc, char* argv[]) {
                         break;
                 case 'v':
                         ++verbose;
+                        break;
+                case 'n':
+                        if (nscount >= MAX_NS)
+                                fatal("Too many nameservers given\n");
+                        ns[nscount++] = optarg;
                         break;
                 default:
                         usage(argv[0]);
@@ -194,25 +224,19 @@ int main(int argc, char* argv[]) {
                 bytes /= 8;
         } else {
                 p = strstr(argv[optind], "::");
-                if (!p) {
-                        fprintf(stderr, "Invalid address format, use 1:2::1 or 1:2::/64\n");
-                        return 1;
-                }
+                if (!p)
+                        fatal("Invalid address format, use 1:2::1 or 1:2::/64\n");
                 while (p >= argv[optind]) {
                         if (*p-- == ':')
                                 bytes += 2;
                 }
         }
-        if (bytes >= 16) {
-                fprintf(stderr, "Number of netmask bits must be less than 128\n");
-                return 1;
-        }
+        if (bytes >= 16)
+                fatal("Number of netmask bits must be less than 128\n");
 
         struct in6_addr addr;
-        if (!inet_pton(AF_INET6, argv[optind], &addr)) {
-                fprintf(stderr, "Invalid IPv6 address\n");
-                return 1;
-        }
+        if (!inet_pton(AF_INET6, argv[optind], &addr))
+                fatal("Invalid IPv6 address\n");
 
         char** domains = argv + optind + 1;
 
@@ -239,7 +263,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (daemonize && daemon(0, 0) < 0)
-                perror("daemon");
+                die("daemon");
 
         for (;;) {
                 struct sockaddr_storage ss;
@@ -310,29 +334,40 @@ int main(int argc, char* argv[]) {
 
                                         ++ancount;
                                 }
-                                if (qtype == TYPE_NS || qtype == TYPE_ANY) {
-                                        const char nsname[] = "\7""1800002\4qxqx\2de";
+                                for (int j = 0; j < 2; ++j) {
+                                        if (j == 1 || qtype == TYPE_NS || qtype == TYPE_ANY) {
+                                                for (int i = 0; i < nscount; ++i) {
+                                                        struct dnsanswer* a = (struct dnsanswer*)q;
+                                                        char nsname[512], tmp[512];
+                                                        strncpy(tmp, ns[i], sizeof(tmp) - 1);
+                                                        strncat(tmp, ".", sizeof(tmp) - 1);
+                                                        strncat(tmp, *d, sizeof(tmp) - 1);
+                                                        ssize_t len = str2dns(nsname, sizeof(nsname), tmp);
+                                                        if (len < 0) {
+                                                                error = ERROR_SERVER;
+                                                                goto error;
+                                                        }
 
-                                        struct dnsanswer* a = (struct dnsanswer*)q;
-                                        q += sizeof (struct dnsanswer) + sizeof(nsname);
-                                        if (q > buf + sizeof (buf)) {
-                                                error = ERROR_SERVER;
-                                                goto error;
+                                                        q += sizeof (struct dnsanswer) + len;
+                                                        if (q > buf + sizeof (buf)) {
+                                                                error = ERROR_SERVER;
+                                                                goto error;
+                                                        }
+
+                                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
+                                                        a->type = htons(TYPE_NS);
+                                                        a->class = htons(qclass);
+                                                        a->ttl = htonl(ttl);
+                                                        a->rdlength = htons(len);
+                                                        memcpy(a->rdata, nsname, len);
+
+                                                        if (verbose > 0)
+                                                                printf("R NS    %s\n", tmp);
+
+                                                        if (j == 0)
+                                                                ++ancount;
+                                                }
                                         }
-
-                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
-                                        a->type = htons(TYPE_NS);
-                                        a->class = htons(qclass);
-                                        a->ttl = htonl(ttl);
-                                        a->rdlength = htons(sizeof(nsname));
-
-                                        memcpy(a->rdata, nsname, sizeof(nsname));
-
-                                        if (verbose > 0) {
-                                                printf("R NS    %s\n", "duuuu");
-                                        }
-
-                                        ++ancount;
                                 }
                                 break;
                         }
@@ -348,7 +383,8 @@ int main(int argc, char* argv[]) {
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
                 h->flags &= ~htons(FLAG_RD);
                 h->ancount = htons(ancount);
-                h->nscount = h->arcount = 0;
+                h->nscount = htons(nscount);
+                h->arcount = 0;
 
                 if (sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen) < 0)
                         perror("sendto");
