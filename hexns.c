@@ -271,10 +271,10 @@ int main(int argc, char* argv[]) {
                         goto error;
                 }
 
-                h->ancount = 0;
-
                 if (verbose > 0)
                         printf("Q %-5s %s\n", type2str(qtype),  name);
+
+                uint16_t ancount = 0;
 
                 for (char** d = domains; *d; ++d) {
                         char* r = p - strlen(*d);
@@ -306,7 +306,31 @@ int main(int argc, char* argv[]) {
                                                 printf("R AAAA  %s\n", name);
                                         }
 
-                                        h->ancount = htons(1);
+                                        ++ancount;
+                                }
+                                if (qtype == TYPE_NS || qtype == TYPE_ANY) {
+                                        const char nsname[] = "\7""1800002\4qxqx\2de";
+
+                                        struct dnsanswer* a = (struct dnsanswer*)q;
+                                        q += sizeof (struct dnsanswer) + sizeof(nsname);
+                                        if (q > buf + sizeof (buf)) {
+                                                error = ERROR_SERVER;
+                                                goto error;
+                                        }
+
+                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
+                                        a->type = htons(TYPE_NS);
+                                        a->class = htons(qclass);
+                                        a->ttl = htonl(ttl);
+                                        a->rdlength = htons(sizeof(nsname));
+
+                                        memcpy(a->rdata, nsname, sizeof(nsname));
+
+                                        if (verbose > 0) {
+                                                printf("R NS    %s\n", "duuuu");
+                                        }
+
+                                        ++ancount;
                                 }
                                 break;
                         }
@@ -316,11 +340,12 @@ int main(int argc, char* argv[]) {
                 if (error) {
                         if (verbose > 0)
                                 printf("E %d\n", error);
-                        h->ancount = 0;
+                        ancount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
                 h->flags &= ~htons(FLAG_RD);
+                h->ancount = htons(ancount);
                 h->nscount = h->arcount = 0;
 
                 if (sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen) < 0)
