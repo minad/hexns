@@ -334,18 +334,25 @@ int main(int argc, char* argv[]) {
 
                                         ++ancount;
                                 }
+                                uint16_t nslabel[MAX_NS] = {0};
                                 for (int j = 0; j < 2; ++j) {
                                         if (j == 1 || qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                 for (int i = 0; i < nscount; ++i) {
+                                                        char tmp[512], nsname[512];
+
                                                         struct dnsanswer* a = (struct dnsanswer*)q;
-                                                        char nsname[512], tmp[512];
-                                                        strncpy(tmp, ns[i], sizeof(tmp) - 1);
-                                                        strncat(tmp, ".", sizeof(tmp) - 1);
-                                                        strncat(tmp, *d, sizeof(tmp) - 1);
-                                                        ssize_t len = str2dns(nsname, sizeof(nsname), tmp);
-                                                        if (len < 0) {
-                                                                error = ERROR_SERVER;
-                                                                goto error;
+                                                        ssize_t len;
+                                                        if (nslabel[i]) {
+                                                                len = 2;
+                                                        } else {
+                                                                strncpy(tmp, ns[i], sizeof(tmp) - 1);
+                                                                strncat(tmp, ".", sizeof(tmp) - 1);
+                                                                strncat(tmp, *d, sizeof(tmp) - 1);
+                                                                len = str2dns(nsname, sizeof(nsname), tmp);
+                                                                if (len < 0) {
+                                                                        error = ERROR_SERVER;
+                                                                        goto error;
+                                                                }
                                                         }
 
                                                         q += sizeof (struct dnsanswer) + len;
@@ -359,15 +366,37 @@ int main(int argc, char* argv[]) {
                                                         a->class = htons(qclass);
                                                         a->ttl = htonl(ttl);
                                                         a->rdlength = htons(len);
-                                                        memcpy(a->rdata, nsname, len);
+                                                        if (nslabel[i]) {
+                                                                *((uint16_t*)a->rdata) = htons(nslabel[i] | LABEL_BITS);
+                                                        } else {
+                                                                memcpy(a->rdata, nsname, len);
+                                                                nslabel[i] = (char*)a->rdata - buf;
+                                                        }
 
-                                                        if (verbose > 0)
-                                                                printf("R NS    %s\n", tmp);
-
-                                                        if (j == 0)
+                                                        if (j == 0) {
+                                                                if (verbose > 0)
+                                                                        printf("R NS    %s\n", tmp);
                                                                 ++ancount;
+                                                        }
                                                 }
                                         }
+                                }
+                                for (int i = 0; i < nscount; ++i) {
+                                        struct dnsanswer* a = (struct dnsanswer*)q;
+                                        q += sizeof (struct dnsanswer) + 16;
+                                        if (q > buf + sizeof (buf)) {
+                                                error = ERROR_SERVER;
+                                                goto error;
+                                        }
+
+                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
+                                        a->type = htons(TYPE_AAAA);
+                                        a->class = htons(qclass);
+                                        a->ttl = htonl(ttl);
+                                        a->rdlength = htons(16);
+
+                                        memcpy(a->rdata, &addr, bytes);
+                                        suffix1337(a->rdata + bytes, 16 - bytes, ns[i]);
                                 }
                                 break;
                         }
@@ -383,8 +412,7 @@ int main(int argc, char* argv[]) {
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
                 h->flags &= ~htons(FLAG_RD);
                 h->ancount = htons(ancount);
-                h->nscount = htons(nscount);
-                h->arcount = 0;
+                h->nscount = h->arcount = htons(nscount);
 
                 if (sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen) < 0)
                         perror("sendto");
