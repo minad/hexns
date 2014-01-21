@@ -161,22 +161,6 @@ static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         return dns;
 }
 
-static void str2dns(char* dns, const char* str, uint16_t dnslabel) {
-        char* p = dns;
-        while (*str) {
-                if (*str == '.')
-                        continue;
-                char* q = strchr(str, '.');
-                size_t n = q ? q - str : strlen(str);
-                *p++ = n;
-                memcpy(p, str, n);
-                str += n;
-                p += n;
-        }
-        *((uint16_t*)p) = htons(dnslabel | LABEL_BITS);
-        p += 2;
-}
-
 static char* answer_aaaa(char* q, size_t prefix, const void* addr, uint32_t ttl, const char* name, uint16_t label) {
         struct dnsanswer* a = (struct dnsanswer*)q;
         q += sizeof (struct dnsanswer) + 16;
@@ -221,6 +205,8 @@ int main(int argc, char* argv[]) {
                         if (nscount >= MAX_NS)
                                 fatal("Too many nameservers given\n");
                         ns[nscount++] = optarg;
+                        if (strchr(optarg, '.'))
+                                fatal("Nameserver must not contain .\n");
                         break;
                 default:
                         usage(argv[0]);
@@ -363,7 +349,9 @@ int main(int argc, char* argv[]) {
                                                                 *((uint16_t*)a->rdata) = htons(nslabel[i] | LABEL_BITS);
                                                         } else {
                                                                 nslabel[i] = (char*)a->rdata - buf;
-                                                                str2dns((char*)a->rdata, ns[i], domainlabel);
+                                                                a->rdata[0] = len - 3;
+                                                                memcpy(a->rdata + 1, ns[i], len - 3);
+                                                                *((uint16_t*)(a->rdata + len - 2)) = htons(domainlabel | LABEL_BITS);
                                                         }
 
                                                         if (j == 0) {
