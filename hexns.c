@@ -177,6 +177,24 @@ static ssize_t str2dns(char* dns, size_t size, const char* str) {
         return p - dns;
 }
 
+char* answer_aaaa(char* q, size_t bytes, const void* addr, const char* name, uint16_t label) {
+        struct dnsanswer* a = (struct dnsanswer*)q;
+        q += sizeof (struct dnsanswer) + 16;
+        if (q > buf + sizeof (buf))
+                return 0;
+
+        int ttl=30;
+        a->label = htons(label | LABEL_BITS);
+        a->type = htons(TYPE_AAAA);
+        a->class = htons(CLASS_INET);
+        a->ttl = htonl(ttl);
+        a->rdlength = htons(16);
+        memcpy(a->rdata, addr, 16);
+        if (name)
+                suffix1337(a->rdata + bytes, 16 - bytes, name);
+        return q;
+}
+
 int main(int argc, char* argv[]) {
         setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -306,29 +324,16 @@ int main(int argc, char* argv[]) {
                         char* r = name + strlen(name) - strlen(*d);
                         if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
-                                        struct dnsanswer* a = (struct dnsanswer*)q;
-                                        q += sizeof (struct dnsanswer) + 16;
-                                        if (q > buf + sizeof (buf)) {
+                                        if (r > name)
+                                                *r = 0;
+                                        q = answer_aaaa(q, bytes, &addr, r > name ? name : 0, sizeof(struct dnsheader));
+                                        if (!q) {
                                                 error = ERROR_SERVER;
                                                 goto error;
                                         }
 
-                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
-                                        a->type = htons(TYPE_AAAA);
-                                        a->class = htons(qclass);
-                                        a->ttl = htonl(ttl);
-                                        a->rdlength = htons(16);
-
-                                        if (r == name) {
-                                                memcpy(a->rdata, &addr, 16);
-                                        } else {
-                                                *r = 0;
-                                                memcpy(a->rdata, &addr, bytes);
-                                                suffix1337(a->rdata + bytes, 16 - bytes, name);
-                                        }
-
                                         if (verbose > 0) {
-                                                inet_ntop(AF_INET6, a->rdata, name, sizeof (name));
+                                                inet_ntop(AF_INET6, q - 16, name, sizeof (name));
                                                 printf("R AAAA  %s\n", name);
                                         }
 
@@ -382,21 +387,11 @@ int main(int argc, char* argv[]) {
                                         }
                                 }
                                 for (int i = 0; i < nscount; ++i) {
-                                        struct dnsanswer* a = (struct dnsanswer*)q;
-                                        q += sizeof (struct dnsanswer) + 16;
-                                        if (q > buf + sizeof (buf)) {
+                                        q = answer_aaaa(q, bytes, &addr, ns[i], nslabel[i]);
+                                        if (!q) {
                                                 error = ERROR_SERVER;
                                                 goto error;
                                         }
-
-                                        a->label = htons(sizeof(struct dnsheader) | LABEL_BITS);
-                                        a->type = htons(TYPE_AAAA);
-                                        a->class = htons(qclass);
-                                        a->ttl = htonl(ttl);
-                                        a->rdlength = htons(16);
-
-                                        memcpy(a->rdata, &addr, bytes);
-                                        suffix1337(a->rdata + bytes, 16 - bytes, ns[i]);
                                 }
                                 break;
                         }
