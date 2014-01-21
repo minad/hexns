@@ -21,7 +21,7 @@ start() {
 
     output=$(dig -p $port @127.0.0.1 $domain AAAA)
     #echo "$output"
-    echo "$output" | grep -i 'WARNING'
+    echo "$output" | grep -Pi 'WARN|FAIL'
     if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+${addr%/*}\$" > /dev/null; then
 	echo -n '.'
     else
@@ -34,7 +34,7 @@ start() {
 status=0
 aaaa() {
     output=$(dig -p $port @127.0.0.1 $1.$domain AAAA $1.$domain A)
-    echo "$output" | grep -i 'WARNING'
+    echo "$output" | grep -Pi 'WARN|FAIL'
     if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
@@ -72,7 +72,7 @@ aaaa() {
     fi
 
     output=$(dig -p $port @127.0.0.1 $1.$domain2 AAAA $1.$domain2 A)
-    echo "$output" | grep -i 'WARNING'
+    echo "$output" | grep -Pi 'WARN|FAIL'
     if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
@@ -82,7 +82,7 @@ aaaa() {
     fi
 
     output=$(dig -p $port @127.0.0.1 $1.$domain ANY)
-    echo "$output" | grep -i 'WARNING'
+    echo "$output" | grep -Pi 'WARN|FAIL'
     if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
@@ -92,7 +92,7 @@ aaaa() {
 
     for record in TXT MX A CNAME NS; do
 	output=$(dig -p $port @127.0.0.1 $1.$domain $record)
-        echo "$output" | grep -i 'WARNING'
+	echo "$output" | grep -Pi 'WARN|FAIL'
 	if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
 	    echo -e "\nERROR Record $record found"
 	else
@@ -160,7 +160,7 @@ start 3001 500 a:b::/94 org y
 aaaa dadadadadadadada a:b::dada:dada
 
 output=$(dig -p $port @127.0.0.1 abc AAAA)
-echo "$output" | grep -i 'WARNING'
+echo "$output" | grep -Pi 'WARN|FAIL'
 if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
     echo -e "\nERROR Record AAAA found"
 else
@@ -168,7 +168,7 @@ else
 fi
 
 output=$(dig -p $port @127.0.0.1 test$domain AAAA)
-echo "$output" | grep -i 'WARNING'
+echo "$output" | grep -Pi 'WARN|FAIL'
 if echo "$output" | grep -P "ANSWER SECTION" > /dev/null; then
     echo -e "\nERROR Record AAAA found"
 else

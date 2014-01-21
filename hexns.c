@@ -12,6 +12,7 @@
 #include <ctype.h>
 #include <getopt.h>
 #include <pwd.h>
+#include <stdarg.h>
 
 #define CLASS_INET    0x01
 #define OP_MASK       0x7000
