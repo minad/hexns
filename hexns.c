@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
         int daemonize = 0, verbose = 0;
         char c;
         char* ns[MAX_NS];
-        int nscount = 0;
+        int numns = 0;
         while ((c = getopt(argc, argv, "hvdp:t:n:")) != -1) {
                 switch (c) {
                 case 'p':
@@ -210,9 +210,9 @@ int main(int argc, char* argv[]) {
                         ++verbose;
                         break;
                 case 'n':
-                        if (nscount >= MAX_NS)
+                        if (numns >= MAX_NS)
                                 fatal("Too many nameservers given\n");
-                        ns[nscount++] = optarg;
+                        ns[numns++] = optarg;
                         if (strchr(optarg, '.'))
                                 fatal("Nameserver must not contain .\n");
                         break;
@@ -302,8 +302,7 @@ int main(int argc, char* argv[]) {
                 if (verbose > 0)
                         printf("Q %-5s %s\n", type2str(qtype),  name);
 
-                uint16_t ancount = 0;
-
+                uint16_t ancount = 0, nscount = 0;
                 for (char** d = domains; *d; ++d) {
                         char* r = name + strlen(name) - strlen(*d);
                         if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
@@ -324,7 +323,7 @@ int main(int argc, char* argv[]) {
                                 uint16_t nslabel[MAX_NS] = {0};
                                 for (int j = 0; j < 2; ++j) {
                                         if (j == 1 || (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY))) {
-                                                for (int i = 0; i < nscount; ++i) {
+                                                for (int i = 0; i < numns; ++i) {
                                                         size_t len = nslabel[i] ? 2 : strlen(ns[i]) + 3;
                                                         struct dnsanswer* a = answer(&q, domainlabel, TYPE_NS, ttl, len);
                                                         ASSUME(q, SERVER);
@@ -346,8 +345,10 @@ int main(int argc, char* argv[]) {
                                                 }
                                         }
                                 }
-                                for (int i = 0; i < nscount; ++i)
+                                for (int i = 0; i < numns; ++i)
                                         ASSUME(answer_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
+
+                                nscount = numns;
                                 break;
                         }
                 }
