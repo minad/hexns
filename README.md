@@ -1,6 +1,6 @@
 # hexns
 
-Nameserver for IPv6 which resolves Hexspeak subdomains in 250 lines of code
+Nameserver for IPv6 which resolves Hexspeak subdomains
 
 ## Usage
 
