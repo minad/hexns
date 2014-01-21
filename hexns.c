@@ -129,13 +129,29 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] ipv6addr domains...\n", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-n ns] ipv6addr domains...\n", prog);
         exit(1);
 }
 
 static void die(const char* s) {
         perror(s);
         exit(1);
+}
+
+static char* dns2str(char* name, size_t size, char* in, const char* end) {
+        size_t n;
+        char* p = name;
+        while (in < end && (n = *in++)) {
+                if (n > 63 || p + n + 1 > name + size - 1)
+                        return 0;
+                if (p != name)
+                        *p++ = '.';
+                memcpy(p, in, n);
+                p += n;
+                in += n;
+        }
+        *p = 0;
+        return in;
 }
 
 int main(int argc, char* argv[]) {
@@ -145,7 +161,7 @@ int main(int argc, char* argv[]) {
         uint32_t ttl = 30;
         int daemonize = 0, verbose = 0;
         char c;
-        while ((c = getopt(argc, argv, "hvdp:t:")) != -1) {
+        while ((c = getopt(argc, argv, "hvdp:t:n:")) != -1) {
                 switch (c) {
                 case 'p':
                         port = atoi(optarg);
@@ -242,22 +258,8 @@ int main(int argc, char* argv[]) {
                 }
 
                 char name[512];
-                char *q = buf + sizeof (struct dnsheader), *qend = buf + size, *p = name;
-                size_t n;
-                while (q < qend && (n = *q++)) {
-                        if (n > 63 || p + n + 1 > name + sizeof(name) - 1) {
-                                error = ERROR_FORMAT;
-                                goto error;
-                        }
-                        if (p != name)
-                                *p++ = '.';
-                        memcpy(p, q, n);
-                        p += n;
-                        q += n;
-                }
-                *p = 0;
-
-                if (q + 4 > qend) {
+                char *q = dns2str(name, sizeof(name), buf + sizeof (struct dnsheader), buf + size);
+                if (!q || q + 4 > buf + size) {
                         error = ERROR_FORMAT;
                         goto error;
                 }
@@ -277,7 +279,7 @@ int main(int argc, char* argv[]) {
                 uint16_t ancount = 0;
 
                 for (char** d = domains; *d; ++d) {
-                        char* r = p - strlen(*d);
+                        char* r = name + strlen(name) - strlen(*d);
                         if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
                                         struct dnsanswer* a = (struct dnsanswer*)q;
