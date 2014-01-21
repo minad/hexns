@@ -161,22 +161,20 @@ static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         return dns;
 }
 
-static ssize_t str2dns(char* dns, size_t size, const char* str, uint16_t dnslabel) {
+static void str2dns(char* dns, const char* str, uint16_t dnslabel) {
         char* p = dns;
         while (*str) {
+                if (*str == '.')
+                        continue;
                 char* q = strchr(str, '.');
                 size_t n = q ? q - str : strlen(str);
-                if (p + 2 + n > dns + size)
-                        return -1;
                 *p++ = n;
                 memcpy(p, str, n);
-                str += n + 1;
+                str += n;
                 p += n;
         }
-        //*((uint16_t*)p) = htons(dnslabel | LABEL_BITS);
-        //p += 2;
-        *p++ = 0;
-        return p - dns;
+        *((uint16_t*)p) = htons(dnslabel | LABEL_BITS);
+        p += 2;
 }
 
 static char* answer_aaaa(char* q, size_t prefix, const void* addr, uint32_t ttl, const char* name, uint16_t label) {
@@ -346,22 +344,8 @@ int main(int argc, char* argv[]) {
                                 for (int j = 0; j < 2; ++j) {
                                         if (j == 1 || (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY))) {
                                                 for (int i = 0; i < nscount; ++i) {
-                                                        char nsname[512];
-
                                                         struct dnsanswer* a = (struct dnsanswer*)q;
-                                                        ssize_t len;
-                                                        if (nslabel[i]) {
-                                                                len = 2;
-                                                        } else {
-                                                                strncpy(name, ns[i], sizeof(name) - 1);
-                                                                strncat(name, ".", sizeof(name) - 1);
-                                                                strncat(name, *d, sizeof(name) - 1);
-                                                                len = str2dns(nsname, sizeof(nsname), name, domainlabel);
-                                                                if (len < 0) {
-                                                                        error = ERROR_SERVER;
-                                                                        goto error;
-                                                                }
-                                                        }
+                                                        size_t len = nslabel[i] ? 2 : strlen(ns[i]) + 3;
 
                                                         q += sizeof (struct dnsanswer) + len;
                                                         if (q > buf + sizeof (buf)) {
@@ -371,23 +355,20 @@ int main(int argc, char* argv[]) {
 
                                                         a->label = htons(domainlabel | LABEL_BITS);
                                                         a->type = htons(TYPE_NS);
-                                                        a->class = htons(qclass);
+                                                        a->class = htons(CLASS_INET);
                                                         a->ttl = htonl(ttl);
                                                         a->rdlength = htons(len);
+
                                                         if (nslabel[i]) {
                                                                 *((uint16_t*)a->rdata) = htons(nslabel[i] | LABEL_BITS);
                                                         } else {
-                                                                memcpy(a->rdata, nsname, len);
                                                                 nslabel[i] = (char*)a->rdata - buf;
+                                                                str2dns((char*)a->rdata, ns[i], domainlabel);
                                                         }
 
                                                         if (j == 0) {
-                                                                if (verbose > 0) {
-                                                                        strncpy(name, ns[i], sizeof(name) - 1);
-                                                                        strncat(name, ".", sizeof(name) - 1);
-                                                                        strncat(name, *d, sizeof(name) - 1);
-                                                                        printf("R NS    %s\n", name);
-                                                                }
+                                                                if (verbose > 0)
+                                                                        printf("R NS    %s.%s\n", ns[i], *d);
                                                                 ++ancount;
                                                         }
                                                 }
