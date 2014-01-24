@@ -38,6 +38,7 @@ aaaa() {
     if echo "$output" | grep -P "$ttl\\s+IN\\s+AAAA\\s+$2\$" > /dev/null; then
 	echo -n '.'
     else
+    echo "$output"
 	echo -e "\nERROR $1.$domain"
 	#echo "$output" | grep -P AAAA
 	status=1
@@ -77,7 +78,7 @@ aaaa() {
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain2"
-	echo "$output" | grep -P AAAA
+	#echo "$output" | grep -P AAAA
 	status=1
     fi
 
@@ -133,7 +134,7 @@ aaaa zöööf 1:2:3:4::c0e0:e0ef
 aaaa z.öf 1:2:3:4::c0ef
 aaaa zöph 1:2:3:4::c0ef
 aaaa ZÖPH 1:2:3:4::c0ef
-aaaa zofenpeter 1:2:3:4:0:c:feb:e7e7
+aaaa zofenpeter 1:2:3:4:0:c:feb:ede7
 aaaa ozfenbe7erdadadadada 1:2:3:4:cfe:be7e:7dad:adad
 aaaa be7eozferdadadadada 1:2:3:4:be7e:cfe:7dad:adad
 aaaa leet 1:2:3:4::1337
@@ -151,7 +152,7 @@ aaaa ZÖF a:b::c0ef
 aaaa ZÄF a:b::caef
 aaaa zöööf a:b::c0e0:e0ef
 aaaa zöph a:b::c0ef
-aaaa zofenpeter a:b::c:feb:e7e7
+aaaa zofenpeter a:b::c:feb:ede7
 
 start 3001 500 a:b::/96 org x
 aaaa dadadadadadadada a:b::dada:dada

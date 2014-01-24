@@ -108,7 +108,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
                 case 'k':
                 case 'z': *p++ = 0xC; break;
                 case 's': *p++ = 0x5; break;
-                case 'r':
+                case 'r': *p++ = 0x7; break;
                 case 't': *p++ = 0xD; break;
                 case 195:
                         if (q[1] == 164 || q[1] == 132 || q[1] == 182 || q[1] == 150) {
