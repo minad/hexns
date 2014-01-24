@@ -15,6 +15,7 @@
 #include <getopt.h>
 #include <pwd.h>
 #include <stdarg.h>
+#include <time.h>
 
 #define CLASS_INET    0x01
 #define OP_MASK       0x7000
@@ -27,6 +28,8 @@
 #define ERROR_SERVER  0x0002
 #define ERROR_NOTIMPL 0x0004
 #define MAX_NS        4
+#define SOA_ADMIN     "postmaster"
+
 enum {
         TYPE_A     = 1,
         TYPE_NS    = 2,
@@ -57,6 +60,14 @@ struct dnsrecord {
         uint16_t rdlength;
         uint8_t  rdata[0];
 } __attribute__ ((packed));
+
+struct dnssoa {
+        uint32_t serial;
+        uint32_t refresh;
+        uint32_t retry;
+        uint32_t expire;
+        uint32_t minimum;
+};
 
 static const char* type2str(uint16_t type) {
         static char buffer[32];
@@ -188,9 +199,9 @@ static struct dnsrecord* record_aaaa(char** q, size_t prefix, const void* addr, 
         return a;
 }
 
-static struct dnsrecord* record_ns(char** q, uint32_t ttl, const char* name, uint16_t* nslabel, uint16_t label) {
-        size_t len = *nslabel ? 2 : strlen(name) + 3;
-        struct dnsrecord* a = record(q, label, TYPE_NS, ttl, len);
+static struct dnsrecord* record_ns(char** q, uint16_t type, size_t typelen, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
+        size_t len = *nslabel ? 2 : strlen(nsname) + 3;
+        struct dnsrecord* a = record(q, label, type, ttl, typelen + len);
         if (!a)
                 return 0;
         if (*nslabel) {
@@ -198,10 +209,39 @@ static struct dnsrecord* record_ns(char** q, uint32_t ttl, const char* name, uin
         } else {
                 *nslabel = (char*)a->rdata - buf;
                 a->rdata[0] = len - 3;
-                memcpy(a->rdata + 1, name, len - 3);
+                memcpy(a->rdata + 1, nsname, len);
                 *((uint16_t*)(a->rdata + len - 2)) = htons(label | LABEL_BITS);
         }
         return a;
+}
+
+static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
+        time_t now = time(0);
+        struct tm* t = localtime(&now);
+        static struct dnssoa soa = {
+                .refresh = 14400,
+                .retry = 1800,
+                .expire = 604800,
+                .minimum = 86400,
+        };
+        soa.serial = 1000000 * (t->tm_year + 1900) + 10000 * (t->tm_mon + 1) + 100 * t->tm_mday + t->tm_hour * 4 + t->tm_min / 15;
+        uint8_t len = strlen(SOA_ADMIN);
+        struct dnsrecord* a = record_ns(q, TYPE_SOA, len + 3 + sizeof (struct dnssoa), ttl, nsname, nslabel, label);
+        if (!a)
+                return 0;
+        uint8_t* p = (uint8_t*)*q - (len + 3 + sizeof (struct dnssoa));
+        *p = len;
+        memcpy(p + 1, SOA_ADMIN, len);
+        p += len + 1;
+        *(uint16_t*)p = htons(label | LABEL_BITS);
+        p += 2;
+        struct dnssoa* s = (struct dnssoa*)p;
+        s->serial = htonl(soa.serial);
+        s->refresh = htonl(soa.refresh);
+        s->retry = htonl(soa.retry);
+        s->expire = htonl(soa.expire);
+        s->minimum = htonl(soa.minimum);
+        return &soa;
 }
 
 #define ASSUME(cond, e) if (!(cond)) { error = ERROR_##e; goto error; }
@@ -333,7 +373,7 @@ int main(int argc, char* argv[]) {
                 if (verbose > 0)
                         printf("Q %-5s %s\n", type2str(qtype),  name);
 
-                uint16_t ancount = 0, nscount = 0;
+                uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** d = domains; *d; ++d) {
                         char* r = name + strlen(name) - strlen(*d);
                         if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
@@ -353,21 +393,36 @@ int main(int argc, char* argv[]) {
                                 }
                                 if (numns > 0) {
                                         uint16_t nslabel[MAX_NS] = {0};
-                                        if (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY)) {
-                                                for (int i = 0; i < numns; ++i) {
-                                                        ASSUME(record_ns(&q, ttl, ns[i], nslabel + i, domainlabel), SERVER);
-                                                        if (verbose > 0)
-                                                                printf("R NS    %s.%s\n", ns[i], *d);
+                                        if (r == name) {
+                                                if (qtype == TYPE_NS || qtype == TYPE_ANY) {
+                                                        for (int i = 0; i < numns; ++i) {
+                                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domainlabel), SERVER);
+                                                                if (verbose > 0)
+                                                                        printf("R NS    %s.%s.\n", ns[i], *d);
+                                                        }
+                                                        ancount += numns;
                                                 }
-                                                ancount += numns;
+                                                if (qtype == TYPE_SOA || qtype == TYPE_ANY) {
+                                                        struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domainlabel);
+                                                        ASSUME(s, SERVER);
+                                                        if (verbose > 0)
+                                                                printf("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *d, SOA_ADMIN, *d,
+                                                                       s->serial, s->refresh, s->retry, s->expire, s->minimum);
+                                                        ++ancount;
+                                                }
                                         }
-
                                         for (int i = 0; i < numns; ++i)
-                                                ASSUME(record_ns(&q, ttl, ns[i], nslabel + i, domainlabel), SERVER);
+                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domainlabel), SERVER);
+                                        if (qtype == TYPE_MX || qtype == TYPE_A) {
+                                                ASSUME(record_soa(&q, ttl, ns[0], nslabel, domainlabel), SERVER);
+                                                ++nscount;
+                                        }
                                         for (int i = 0; i < numns; ++i)
                                                 ASSUME(record_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
-                                        nscount = numns;
+                                        nscount += numns;
+                                        arcount += numns;
                                 }
+
                                 break;
                         }
                 }
@@ -382,7 +437,8 @@ int main(int argc, char* argv[]) {
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
                 h->flags &= ~htons(FLAG_RD);
                 h->ancount = htons(ancount);
-                h->nscount = h->arcount = htons(nscount);
+                h->nscount = htons(nscount);
+                h->arcount = htons(arcount);
 
                 if (sendto(sock, buf, q - buf, 0, (struct sockaddr*)&ss, sslen) < 0)
                         perror("sendto");
