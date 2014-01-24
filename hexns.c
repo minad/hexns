@@ -329,7 +329,7 @@ int main(int argc, char* argv[]) {
                                                         for (int i = 0; i < numns; ++i) {
                                                                 size_t len = nslabel[i] ? 2 : strlen(ns[i]) + 3;
                                                                 struct dnsrecord* a = record(&q, domainlabel, TYPE_NS, ttl, len);
-                                                                ASSUME(q, SERVER);
+                                                                ASSUME(a, SERVER);
 
                                                                 if (nslabel[i]) {
                                                                         *((uint16_t*)a->rdata) = htons(nslabel[i] | LABEL_BITS);
