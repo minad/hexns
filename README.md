@@ -6,7 +6,7 @@ Nameserver for IPv6 which resolves Hexspeak subdomains
 
 ~~~
 $ make
-$ ./hexns 3000 1:2:3:4:: hexns.org &
+$ ./hexns -p 3000 1:2:3:4:: hexns.org &
 $ dig +short -p 3000 @127.0.0.1 deadbeef.hexns.org AAAA
 1:2:3:4::dead:beef
 $ dig +short -p 3000 @127.0.0.1 leetcode.hexns.org AAAA
