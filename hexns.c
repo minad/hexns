@@ -444,7 +444,8 @@ int main(int argc, char* argv[]) {
                 if (error) {
                         if (verbose > 0)
                                 printf("E %d\n", error);
-                        ancount = 0;
+                        ancount = nscount = arcount = 0;
+                        h->qdcount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
