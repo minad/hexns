@@ -4,6 +4,8 @@
 #define _BSD_SOURCE
 #include <arpa/inet.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -281,18 +283,29 @@ int main(int argc, char* argv[]) {
         if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
                 die("bind");
 
+        if (daemonize && daemon(0, 0) < 0)
+                die("daemon");
+
         if (!getuid()) {
                 struct passwd* pw = getpwnam("nobody");
                 if (!pw)
                         die("getpwnam");
-                if (setgid(pw->pw_gid))
+                char name[] = "/tmp/hexns.XXXXXX";
+                if (!mkdtemp(name))
+                        die("mkdtemp");
+                if (chdir(name) < 0)
+                        die("chdir");
+                if (rmdir(name) < 0)
+                        die("rmdir");
+                if (chroot(".") < 0)
+                        die("chroot");
+                if (setgid(pw->pw_gid) < 0)
                         die("setgid");
-                if (setuid(pw->pw_uid))
+                if (setuid(pw->pw_uid) < 0)
                         die("setuid");
+                if (!setuid(0))
+                        fatal("Dropping privileges failed");
         }
-
-        if (daemonize && daemon(0, 0) < 0)
-                die("daemon");
 
         for (;;) {
                 struct sockaddr_storage ss;
