@@ -105,6 +105,7 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
                 case 'j': *p++ = 0x1; break;
                 case 'g': *p++ = 0x9; break;
                 case 'q': *p++ = 0x6; break;
+                case 'k':
                 case 'z': *p++ = 0xC; break;
                 case 's': *p++ = 0x5; break;
                 case 'r':
