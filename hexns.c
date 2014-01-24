@@ -186,6 +186,22 @@ static struct dnsrecord* record_aaaa(char** q, size_t prefix, const void* addr, 
         return a;
 }
 
+static struct dnsrecord* record_ns(char** q, uint32_t ttl, const char* name, uint16_t* nslabel, uint16_t label) {
+        size_t len = *nslabel ? 2 : strlen(name) + 3;
+        struct dnsrecord* a = record(q, label, TYPE_NS, ttl, len);
+        if (!a)
+                return 0;
+        if (*nslabel) {
+                *((uint16_t*)a->rdata) = htons(*nslabel | LABEL_BITS);
+        } else {
+                *nslabel = (char*)a->rdata - buf;
+                a->rdata[0] = len - 3;
+                memcpy(a->rdata + 1, name, len - 3);
+                *((uint16_t*)(a->rdata + len - 2)) = htons(label | LABEL_BITS);
+        }
+        return a;
+}
+
 #define ASSUME(cond, e) if (!(cond)) { error = ERROR_##e; goto error; }
 
 int main(int argc, char* argv[]) {
@@ -327,19 +343,7 @@ int main(int argc, char* argv[]) {
                                         for (int j = 0; j < 2; ++j) {
                                                 if (j == 1 || (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY))) {
                                                         for (int i = 0; i < numns; ++i) {
-                                                                size_t len = nslabel[i] ? 2 : strlen(ns[i]) + 3;
-                                                                struct dnsrecord* a = record(&q, domainlabel, TYPE_NS, ttl, len);
-                                                                ASSUME(a, SERVER);
-
-                                                                if (nslabel[i]) {
-                                                                        *((uint16_t*)a->rdata) = htons(nslabel[i] | LABEL_BITS);
-                                                                } else {
-                                                                        nslabel[i] = (char*)a->rdata - buf;
-                                                                        a->rdata[0] = len - 3;
-                                                                        memcpy(a->rdata + 1, ns[i], len - 3);
-                                                                        *((uint16_t*)(a->rdata + len - 2)) = htons(domainlabel | LABEL_BITS);
-                                                                }
-
+                                                                ASSUME(record_ns(&q, ttl, ns[i], nslabel + i, domainlabel), SERVER);
                                                                 if (j == 0) {
                                                                         if (verbose > 0)
                                                                                 printf("R NS    %s.%s\n", ns[i], *d);
