@@ -340,21 +340,19 @@ int main(int argc, char* argv[]) {
                                 }
                                 if (numns > 0) {
                                         uint16_t nslabel[MAX_NS] = {0};
-                                        for (int j = 0; j < 2; ++j) {
-                                                if (j == 1 || (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY))) {
-                                                        for (int i = 0; i < numns; ++i) {
-                                                                ASSUME(record_ns(&q, ttl, ns[i], nslabel + i, domainlabel), SERVER);
-                                                                if (j == 0) {
-                                                                        if (verbose > 0)
-                                                                                printf("R NS    %s.%s\n", ns[i], *d);
-                                                                        ++ancount;
-                                                                }
-                                                        }
+                                        if (r == name && (qtype == TYPE_NS || qtype == TYPE_ANY)) {
+                                                for (int i = 0; i < numns; ++i) {
+                                                        ASSUME(record_ns(&q, ttl, ns[i], nslabel + i, domainlabel), SERVER);
+                                                        if (verbose > 0)
+                                                                printf("R NS    %s.%s\n", ns[i], *d);
                                                 }
+                                                ancount += numns;
                                         }
+
+                                        for (int i = 0; i < numns; ++i)
+                                                ASSUME(record_ns(&q, ttl, ns[i], nslabel + i, domainlabel), SERVER);
                                         for (int i = 0; i < numns; ++i)
                                                 ASSUME(record_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
-
                                         nscount = numns;
                                 }
                                 break;
