@@ -152,7 +152,7 @@ static void fatal(const char* fmt, ...) {
 }
 
 static void usage(const char* prog) {
-        fatal("Usage: %s [-d] [-p port] [-t ttl] [-n ns] ipv6addr domains...\n", prog);
+        fatal("Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns] ipv6addr domains...\n", prog);
 }
 
 static void die(const char* s) {
@@ -253,9 +253,9 @@ int main(int argc, char* argv[]) {
         uint32_t ttl = 30;
         int daemonize = 0, verbose = 0;
         char c;
-        char* ns[MAX_NS];
+        char* ns[MAX_NS], *txt = 0;
         int numns = 0;
-        while ((c = getopt(argc, argv, "hvdp:t:n:")) != -1) {
+        while ((c = getopt(argc, argv, "hvdp:t:n:x:")) != -1) {
                 switch (c) {
                 case 'p':
                         port = atoi(optarg);
@@ -268,6 +268,11 @@ int main(int argc, char* argv[]) {
                         break;
                 case 'v':
                         ++verbose;
+                        break;
+                case 'x':
+                        txt = optarg;
+                        if (strlen(txt) > 255)
+                                fatal("TXT field too long\n");
                         break;
                 case 'n':
                         if (numns >= MAX_NS)
@@ -383,13 +388,21 @@ int main(int argc, char* argv[]) {
                                         if (r > name)
                                                 *r = 0;
                                         ASSUME(record_aaaa(&q, prefix, &addr, ttl, r > name ? name : 0, sizeof(struct dnsheader)), SERVER);
-
+                                        ++ancount;
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
                                                 printf("R AAAA  %s\n", name);
                                         }
-
+                                }
+                                if (txt && (qtype == TYPE_TXT || qtype == TYPE_ANY)) {
+                                        size_t len = strlen(txt);
+                                        struct dnsrecord* a = record(&q, sizeof (struct dnsheader), TYPE_TXT, ttl, len + 1);
+                                        ASSUME(a, SERVER);
+                                        a->rdata[0] = len;
+                                        memcpy(a->rdata + 1, txt, len);
                                         ++ancount;
+                                        if (verbose > 0)
+                                                printf("R TXT   \"%s\"\n", txt);
                                 }
                                 if (numns > 0) {
                                         uint16_t nslabel[MAX_NS] = {0};
@@ -405,10 +418,10 @@ int main(int argc, char* argv[]) {
                                                 if (qtype == TYPE_SOA || qtype == TYPE_ANY) {
                                                         struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domainlabel);
                                                         ASSUME(s, SERVER);
+                                                        ++ancount;
                                                         if (verbose > 0)
                                                                 printf("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *d, SOA_ADMIN, *d,
                                                                        s->serial, s->refresh, s->retry, s->expire, s->minimum);
-                                                        ++ancount;
                                                 }
                                         }
                                         for (int i = 0; i < numns; ++i)
