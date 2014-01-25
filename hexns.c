@@ -1,6 +1,4 @@
-/* Hexspeak DNS server
- * Daniel Mendler <mail@daniel-mendler.de>
- */
+// Hexspeak DNS server by Daniel Mendler <mail@daniel-mendler.de>
 #define _BSD_SOURCE
 #include <arpa/inet.h>
 #include <sys/stat.h>
@@ -12,7 +10,6 @@
 #include <ctype.h>
 #include <getopt.h>
 #include <pwd.h>
-#include <stdarg.h>
 #include <time.h>
 
 #define SOA_ADMIN        "postmaster"
@@ -325,9 +322,9 @@ int main(int argc, char* argv[]) {
                 LOG("Q %-5s %s\n", type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
-                for (char** d = argv + optind + 1; *d; ++d) {
-                        char* r = name + strlen(name) - strlen(*d);
-                        if (!strcmp(r, *d) && (r == name || (r > name && r[-1] == '.'))) {
+                for (char** domain = argv + optind + 1; *domain; ++domain) {
+                        char* r = name + strlen(name) - strlen(*domain);
+                        if (!strcmp(r, *domain) && (r == name || (r > name && r[-1] == '.'))) {
                                 uint16_t domlabel = sizeof(struct dnsheader) + (r - name);
 
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
@@ -355,7 +352,7 @@ int main(int argc, char* argv[]) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
                                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
-                                                                LOG("R NS    %s.%s.\n", ns[i], *d);
+                                                                LOG("R NS    %s.%s.\n", ns[i], *domain);
                                                         }
                                                         ancount += numns;
                                                 }
@@ -363,19 +360,19 @@ int main(int argc, char* argv[]) {
                                                         struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
-                                                        LOG("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *d, SOA_ADMIN, *d,
+                                                        LOG("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *domain, SOA_ADMIN, *domain,
                                                             s->serial, s->refresh, s->retry, s->expire, s->minimum);
                                                 }
                                         }
                                         for (int i = 0; i < numns; ++i)
                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
+                                        nscount += numns;
                                         if (qtype == TYPE_MX || qtype == TYPE_A || qtype == TYPE_CNAME) {
                                                 ASSUME(record_soa(&q, ttl, ns[0], nslabel, domlabel), SERVER);
                                                 ++nscount;
                                         }
                                         for (int i = 0; i < numns; ++i)
                                                 ASSUME(record_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
-                                        nscount += numns;
                                         arcount += numns;
                                 }
 
