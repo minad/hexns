@@ -15,11 +15,11 @@
 #include <stdarg.h>
 #include <time.h>
 
-#define SOA_ADMIN "postmaster"
-#define DIE(cond, name) if (!(cond)) { perror(#name); exit(1); }
+#define SOA_ADMIN        "postmaster"
+#define DIE(cond, name)  if (!(cond)) { perror(#name); exit(1); }
 #define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
-#define ASSUME(cond, e) if (!(cond)) { error = ERROR_##e; goto error; }
-
+#define ASSUME(cond, e)  if (!(cond)) { error = ERROR_##e; goto error; }
+#define LOG(...)         if (verbose > 0) { printf(__VA_ARGS__); }
 enum {
         CLASS_INET   = 0x01,
         OP_MASK      = 0x7000,
@@ -110,17 +110,14 @@ static void suffix1337(char* dst, size_t size, const char* name) {
                                 break;
                         }
                         // fall through
-                case 'i':
-                case 'j': *p++ = 0x1; break;
-                case 'g': *p++ = 0x9; break;
-                case '0':
-                case 'o': *p++ = 0x0; break;
-                case 'q': *p++ = 0x6; break;
-                case 'k':
-                case 'z': *p++ = 0xC; break;
-                case 's': *p++ = 0x5; break;
-                case 'r': *p++ = 0x7; break;
-                case 't': *p++ = 0xD; break;
+                case 'i': case 'j': *p++ = 0x1; break;
+                case 'g':           *p++ = 0x9; break;
+                case '0': case 'o': *p++ = 0x0; break;
+                case 'q':           *p++ = 0x6; break;
+                case 'k': case 'z': *p++ = 0xC; break;
+                case 's':           *p++ = 0x5; break;
+                case 'r':           *p++ = 0x7; break;
+                case 't':           *p++ = 0xD; break;
                 case 195:
                         if (q[1] == 164 || q[1] == 132 || q[1] == 182 || q[1] == 150) {
                                 ++q;
@@ -326,14 +323,13 @@ int main(int argc, char* argv[]) {
                 ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
-                if (verbose > 0)
-                        printf("Q %-5s %s\n", type2str(qtype), name);
+                LOG("Q %-5s %s\n", type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** d = domains; *d; ++d) {
                         char* r = name + strlen(name) - strlen(*d);
                         if (!strcmp(r, *d) && (r == name || (r > name && r[-1] == '.'))) {
-                                uint16_t domainlabel = sizeof(struct dnsheader) + (r - name);
+                                uint16_t domlabel = sizeof(struct dnsheader) + (r - name);
 
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
                                         if (r > name)
@@ -352,33 +348,30 @@ int main(int argc, char* argv[]) {
                                         a->rdata[0] = len;
                                         memcpy(a->rdata + 1, txt, len);
                                         ++ancount;
-                                        if (verbose > 0)
-                                                printf("R TXT   \"%s\"\n", txt);
+                                        LOG("R TXT   \"%s\"\n", txt);
                                 }
                                 if (numns > 0) {
                                         uint16_t nslabel[MAX_NS] = {0};
                                         if (r == name) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
-                                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domainlabel), SERVER);
-                                                                if (verbose > 0)
-                                                                        printf("R NS    %s.%s.\n", ns[i], *d);
+                                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
+                                                                LOG("R NS    %s.%s.\n", ns[i], *d);
                                                         }
                                                         ancount += numns;
                                                 }
                                                 if (qtype == TYPE_SOA || qtype == TYPE_ANY) {
-                                                        struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domainlabel);
+                                                        struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
-                                                        if (verbose > 0)
-                                                                printf("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *d, SOA_ADMIN, *d,
-                                                                       s->serial, s->refresh, s->retry, s->expire, s->minimum);
+                                                        LOG("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *d, SOA_ADMIN, *d,
+                                                            s->serial, s->refresh, s->retry, s->expire, s->minimum);
                                                 }
                                         }
                                         for (int i = 0; i < numns; ++i)
-                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domainlabel), SERVER);
+                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
                                         if (qtype == TYPE_MX || qtype == TYPE_A) {
-                                                ASSUME(record_soa(&q, ttl, ns[0], nslabel, domainlabel), SERVER);
+                                                ASSUME(record_soa(&q, ttl, ns[0], nslabel, domlabel), SERVER);
                                                 ++nscount;
                                         }
                                         for (int i = 0; i < numns; ++i)
@@ -393,8 +386,7 @@ int main(int argc, char* argv[]) {
 
         error:
                 if (error) {
-                        if (verbose > 0)
-                                printf("E %d\n", error);
+                        LOG("E %d\n", error);
                         h->qdcount = ancount = nscount = arcount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
