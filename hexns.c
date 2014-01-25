@@ -20,6 +20,7 @@
 #define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
 #define ASSUME(cond, e)  if (!(cond)) { error = ERROR_##e; goto error; }
 #define LOG(...)         if (verbose > 0) { printf(__VA_ARGS__); }
+
 enum {
         CLASS_INET   = 0x01,
         OP_MASK      = 0x7000,
@@ -179,9 +180,9 @@ static struct dnsrecord* record_aaaa(char** q, size_t prefix, const void* addr, 
         return a;
 }
 
-static struct dnsrecord* record_ns(char** q, uint16_t type, size_t typelen, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
+static struct dnsrecord* record_ns(char** q, uint16_t type, size_t rdlength, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
         size_t len = *nslabel ? 2 : strlen(nsname) + 3;
-        struct dnsrecord* a = record(q, label, type, ttl, typelen + len);
+        struct dnsrecord* a = record(q, label, type, ttl, rdlength + len);
         if (!a)
                 return 0;
         if (*nslabel) {
@@ -275,8 +276,6 @@ int main(int argc, char* argv[]) {
         struct in6_addr addr;
         FATAL(inet_pton(AF_INET6, argv[optind], &addr), "Invalid IPv6 address");
 
-        char** domains = argv + optind + 1;
-
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
         DIE(sock, socket);
 
@@ -326,7 +325,7 @@ int main(int argc, char* argv[]) {
                 LOG("Q %-5s %s\n", type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
-                for (char** d = domains; *d; ++d) {
+                for (char** d = argv + optind + 1; *d; ++d) {
                         char* r = name + strlen(name) - strlen(*d);
                         if (!strcmp(r, *d) && (r == name || (r > name && r[-1] == '.'))) {
                                 uint16_t domlabel = sizeof(struct dnsheader) + (r - name);
@@ -370,7 +369,7 @@ int main(int argc, char* argv[]) {
                                         }
                                         for (int i = 0; i < numns; ++i)
                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
-                                        if (qtype == TYPE_MX || qtype == TYPE_A) {
+                                        if (qtype == TYPE_MX || qtype == TYPE_A || qtype == TYPE_CNAME) {
                                                 ASSUME(record_soa(&q, ttl, ns[0], nslabel, domlabel), SERVER);
                                                 ++nscount;
                                         }
