@@ -319,7 +319,8 @@ int main(int argc, char* argv[]) {
                 ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
-                LOG("Q %-5s %s\n", type2str(qtype), name);
+                time_t now = time(0);
+                LOG("%10ld Q %-5s %s\n", now, type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** domain = argv + optind + 1; *domain; ++domain) {
@@ -334,7 +335,7 @@ int main(int argc, char* argv[]) {
                                         ++ancount;
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
-                                                printf("R AAAA  %s\n", name);
+                                                printf("%10ld R AAAA  %s\n", now, name);
                                         }
                                 }
                                 if (txt && (qtype == TYPE_TXT || qtype == TYPE_ANY)) {
@@ -344,7 +345,7 @@ int main(int argc, char* argv[]) {
                                         a->rdata[0] = len;
                                         memcpy(a->rdata + 1, txt, len);
                                         ++ancount;
-                                        LOG("R TXT   \"%s\"\n", txt);
+                                        LOG("%10ld R TXT   \"%s\"\n", now, txt);
                                 }
                                 if (numns > 0) {
                                         uint16_t nslabel[MAX_NS] = {0};
@@ -352,7 +353,7 @@ int main(int argc, char* argv[]) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
                                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
-                                                                LOG("R NS    %s.%s.\n", ns[i], *domain);
+                                                                LOG("%10ld R NS    %s.%s.\n", now, ns[i], *domain);
                                                         }
                                                         ancount += numns;
                                                 }
@@ -360,7 +361,8 @@ int main(int argc, char* argv[]) {
                                                         struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
-                                                        LOG("R SOA   %s.%s. %s.%s. %d %d %d %d %d\n", ns[0], *domain, SOA_ADMIN, *domain,
+                                                        LOG("%10ld R SOA   %s.%s. %s.%s. %d %d %d %d %d\n",
+                                                            now, ns[0], *domain, SOA_ADMIN, *domain,
                                                             s->serial, s->refresh, s->retry, s->expire, s->minimum);
                                                 }
                                         }
@@ -382,7 +384,7 @@ int main(int argc, char* argv[]) {
 
         error:
                 if (error) {
-                        LOG("E %d\n", error);
+                        LOG("%10ld E %d\n", now, error);
                         h->qdcount = ancount = nscount = arcount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
