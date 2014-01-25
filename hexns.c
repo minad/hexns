@@ -15,28 +15,31 @@
 #include <stdarg.h>
 #include <time.h>
 
-#define CLASS_INET    0x01
-#define OP_MASK       0x7000
-#define OP_QUERY      0x0000
-#define FLAG_QR       0x8000
-#define FLAG_AA       0x0400
-#define FLAG_RD       0x0100
-#define LABEL_BITS    0xC000
-#define ERROR_FORMAT  0x0001
-#define ERROR_SERVER  0x0002
-#define ERROR_NOTIMPL 0x0004
-#define MAX_NS        4
-#define SOA_ADMIN     "postmaster"
+#define SOA_ADMIN "postmaster"
+#define DIE(cond, name) if (!(cond)) { perror(#name); exit(1); }
+#define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
+#define ASSUME(cond, e) if (!(cond)) { error = ERROR_##e; goto error; }
 
 enum {
-        TYPE_A     = 1,
-        TYPE_NS    = 2,
-        TYPE_CNAME = 5,
-        TYPE_SOA   = 6,
-        TYPE_MX    = 15,
-        TYPE_TXT   = 16,
-        TYPE_AAAA  = 28,
-        TYPE_ANY   = 255,
+        CLASS_INET   = 0x01,
+        OP_MASK      = 0x7000,
+        OP_QUERY     = 0x0000,
+        FLAG_QR      = 0x8000,
+        FLAG_AA      = 0x0400,
+        FLAG_RD      = 0x0100,
+        LABEL_BITS   = 0xC000,
+        ERROR_FORMAT = 0x0001,
+        ERROR_SERVER = 0x0002,
+        ERROR_NOTIMP = 0x0004,
+        MAX_NS       = 4,
+        TYPE_A       = 1,
+        TYPE_NS      = 2,
+        TYPE_CNAME   = 5,
+        TYPE_SOA     = 6,
+        TYPE_MX      = 15,
+        TYPE_TXT     = 16,
+        TYPE_AAAA    = 28,
+        TYPE_ANY     = 255,
 };
 
 static char buf[0x400];
@@ -137,20 +140,8 @@ static void suffix1337(char* dst, size_t size, const char* name) {
         free(out);
 }
 
-static void fatal(const char* fmt, ...) {
-        va_list ap;
-        va_start(ap, fmt);
-        vfprintf(stderr, fmt, ap);
-        va_end(ap);
-        exit(1);
-}
-
 static void usage(const char* prog) {
-        fatal("Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns] ipv6addr domains...\n", prog);
-}
-
-static void die(const char* s) {
-        perror(s);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns] ipv6addr domains...", prog);
         exit(1);
 }
 
@@ -235,8 +226,6 @@ static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uin
         return &soa;
 }
 
-#define ASSUME(cond, e) if (!(cond)) { error = ERROR_##e; goto error; }
-
 int main(int argc, char* argv[]) {
         setvbuf(stdout, NULL, _IONBF, 0);
 
@@ -252,15 +241,12 @@ int main(int argc, char* argv[]) {
                 case 'v': ++verbose;           break;
                 case 'x':
                         txt = optarg;
-                        if (strlen(txt) > 255)
-                                fatal("TXT field too long\n");
+                        FATAL(strlen(txt) <= 255, "TXT field too long");
                         break;
                 case 'n':
-                        if (numns >= MAX_NS)
-                                fatal("Too many nameservers given\n");
+                        FATAL(numns < MAX_NS, "Too many nameservers given");
                         ns[numns++] = optarg;
-                        if (strchr(optarg, '.'))
-                                fatal("Nameserver must not contain .\n");
+                        FATAL(!strchr(optarg, '.'), "Nameserver must not contain .");
                         break;
                 default:
                         usage(argv[0]);
@@ -281,56 +267,41 @@ int main(int argc, char* argv[]) {
                 prefix /= 8;
         } else {
                 p = strstr(argv[optind], "::");
-                if (!p)
-                        fatal("Invalid address format, use 1:2::1 or 1:2::/64\n");
+                FATAL(p, "Invalid address format, use 1:2::1 or 1:2::/64");
                 while (p >= argv[optind]) {
                         if (*p-- == ':')
                                 prefix += 2;
                 }
         }
-        if (prefix >= 16)
-                fatal("Number of netmask bits must be less than 128\n");
+        FATAL(prefix < 16, "Number of netmask bits must be less than 128");
 
         struct in6_addr addr;
-        if (!inet_pton(AF_INET6, argv[optind], &addr))
-                fatal("Invalid IPv6 address\n");
+        FATAL(inet_pton(AF_INET6, argv[optind], &addr), "Invalid IPv6 address");
 
         char** domains = argv + optind + 1;
 
         int sock = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock < 0)
-                die("socket");
+        DIE(sock, socket);
 
         struct sockaddr_in6 sa = {
                 .sin6_family = AF_INET6,
                 .sin6_port = htons(port),
                 .sin6_addr = in6addr_any
         };
-        if (bind(sock, (struct sockaddr*)&sa, sizeof(sa)) < 0)
-                die("bind");
-
-        if (daemonize && daemon(0, 0) < 0)
-                die("daemon");
+        DIE(!bind(sock, (struct sockaddr*)&sa, sizeof(sa)), bind);
+        DIE(!daemonize || !daemon(0, 0), daemon);
 
         if (!getuid()) {
                 struct passwd* pw = getpwnam("nobody");
-                if (!pw)
-                        die("getpwnam");
+                DIE(pw, getpwname);
                 char name[] = "/tmp/hexns.XXXXXX";
-                if (!mkdtemp(name))
-                        die("mkdtemp");
-                if (chdir(name) < 0)
-                        die("chdir");
-                if (rmdir(name) < 0)
-                        die("rmdir");
-                if (chroot(".") < 0)
-                        die("chroot");
-                if (setgid(pw->pw_gid) < 0)
-                        die("setgid");
-                if (setuid(pw->pw_uid) < 0)
-                        die("setuid");
-                if (!setuid(0))
-                        fatal("Dropping privileges failed");
+                DIE(mkdtemp(name), mkdtemp);
+                DIE(!chdir(name), chdir);
+                DIE(!rmdir(name), rmdir);
+                DIE(!chroot("."), chroot);
+                DIE(!setgid(pw->pw_gid), setgid);
+                DIE(!setuid(pw->pw_uid), setuid);
+                FATAL(setuid(0) < 0, "Dropping privileges failed");
         }
 
         for (;;) {
@@ -344,7 +315,7 @@ int main(int argc, char* argv[]) {
 
                 struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t error = 0;
-                ASSUME((ntohs(h->flags) & OP_MASK) == OP_QUERY && ntohs(h->qdcount) == 1, NOTIMPL);
+                ASSUME((ntohs(h->flags) & OP_MASK) == OP_QUERY && ntohs(h->qdcount) == 1, NOTIMP);
 
                 char name[512];
                 char *q = dns2str(name, sizeof(name), buf + sizeof (struct dnsheader), buf + size);
@@ -352,7 +323,7 @@ int main(int argc, char* argv[]) {
 
                 uint16_t qtype = ntohs(*((uint16_t*)q));
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
-                ASSUME(qclass == CLASS_INET, NOTIMPL);
+                ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
                 if (verbose > 0)
