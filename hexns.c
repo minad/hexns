@@ -3,9 +3,7 @@
  */
 #define _BSD_SOURCE
 #include <arpa/inet.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <string.h>
@@ -58,7 +56,7 @@ struct dnsrecord {
         uint16_t class;
         uint32_t ttl;
         uint16_t rdlength;
-        uint8_t  rdata[0];
+        char     rdata[0];
 } __attribute__ ((packed));
 
 struct dnssoa {
@@ -67,10 +65,10 @@ struct dnssoa {
         uint32_t retry;
         uint32_t expire;
         uint32_t minimum;
-};
+} __attribute__ ((packed));
 
 static const char* type2str(uint16_t type) {
-        static char buffer[32];
+        static char buf[8];
         switch (type) {
         case TYPE_A:     return "A";
         case TYPE_NS:    return "NS";
@@ -81,18 +79,16 @@ static const char* type2str(uint16_t type) {
         case TYPE_AAAA:  return "AAAA";
         case TYPE_ANY:   return "ANY";
         default:
-                snprintf(buffer, sizeof (buffer), "%d", type);
-                return buffer;
+                snprintf(buf, sizeof (buf), "%d", type);
+                return buf;
         }
 }
 
-static void suffix1337(uint8_t* dst, size_t size, const char* name) {
-        uint8_t* out;
-        idna_to_unicode_8z8z(name, (char**)&out, 0);
-
-        uint8_t nibs[2 * size];
-        uint8_t* p = nibs, *q = out;
-        for (; *q && p < nibs + sizeof (nibs); ++q) {
+static void suffix1337(char* dst, size_t size, const char* name) {
+        char* out, nibs[2 * size];
+        idna_to_unicode_8z8z(name, &out, 0);
+        char* p = nibs;
+        for (uint8_t* q = (uint8_t*)out; *q && p < nibs + sizeof (nibs); ++q) {
                 switch(tolower(*q)) {
                 case '1': case '2': case '3': case '4':
                 case '5': case '6': case '7': case '8': case '9':
@@ -104,9 +100,6 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
                 case 'p':
                         *p++ = q[1] == 'h' || q[1] == 'H' ? ++q, 0xF : 0xB;
                         break;
-                case '0': case 'o':
-                        *p++ = 0x0;
-                        break;
                 case 'l':
                         if (q[1] == 'e' && q[2] == 'e' && q[3] == 't' && p + 3 < nibs + sizeof (nibs)) {
                                 *p++ = 1; *p++ = 3; *p++ = 3; *p++ = 7;
@@ -117,6 +110,8 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
                 case 'i':
                 case 'j': *p++ = 0x1; break;
                 case 'g': *p++ = 0x9; break;
+                case '0':
+                case 'o': *p++ = 0x0; break;
                 case 'q': *p++ = 0x6; break;
                 case 'k':
                 case 'z': *p++ = 0xC; break;
@@ -134,12 +129,11 @@ static void suffix1337(uint8_t* dst, size_t size, const char* name) {
                 }
         }
         --p;
-        for (uint8_t* q = dst + size - 1; q >= dst; --q) {
+        for (char* q = dst + size - 1; q >= dst; --q) {
                 *q = p >= nibs ? *p-- : 0;
                 if (p >= nibs)
                         *q |= *p-- << 4;
         }
-
         free(out);
 }
 
@@ -163,20 +157,18 @@ static void die(const char* s) {
 static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         size_t n;
         char* p = str;
-        while (dns < end && (n = *dns++)) {
+        for (; dns < end && (n = *dns++); p += n, dns += n) {
                 if (n > 63 || p + n + 1 > str + size - 1)
                         return 0;
                 if (p != str)
                         *p++ = '.';
                 memcpy(p, dns, n);
-                p += n;
-                dns += n;
         }
         *p = 0;
         return dns;
 }
 
-static struct dnsrecord* record(char** q, uint16_t label, uint8_t type, uint32_t ttl, uint16_t rdlength) {
+static struct dnsrecord* record(char** q, uint16_t label, uint16_t type, uint32_t ttl, uint16_t rdlength) {
         struct dnsrecord* a = (struct dnsrecord*)*q;
         *q += sizeof (struct dnsrecord) + rdlength;
         if (*q > buf + sizeof (buf))
@@ -207,7 +199,7 @@ static struct dnsrecord* record_ns(char** q, uint16_t type, size_t typelen, uint
         if (*nslabel) {
                 *((uint16_t*)a->rdata) = htons(*nslabel | LABEL_BITS);
         } else {
-                *nslabel = (char*)a->rdata - buf;
+                *nslabel = a->rdata - buf;
                 a->rdata[0] = len - 3;
                 memcpy(a->rdata + 1, nsname, len);
                 *((uint16_t*)(a->rdata + len - 2)) = htons(label | LABEL_BITS);
@@ -216,26 +208,25 @@ static struct dnsrecord* record_ns(char** q, uint16_t type, size_t typelen, uint
 }
 
 static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
-        time_t now = time(0);
-        struct tm* t = localtime(&now);
         static struct dnssoa soa = {
                 .refresh = 14400,
-                .retry = 1800,
-                .expire = 604800,
+                .retry   = 1800,
+                .expire  = 604800,
                 .minimum = 86400,
         };
+        time_t now = time(0);
+        struct tm* t = localtime(&now);
         soa.serial = 1000000 * (t->tm_year + 1900) + 10000 * (t->tm_mon + 1) + 100 * t->tm_mday + t->tm_hour * 4 + t->tm_min / 15;
-        uint8_t len = strlen(SOA_ADMIN);
+        size_t len = strlen(SOA_ADMIN);
         struct dnsrecord* a = record_ns(q, TYPE_SOA, len + 3 + sizeof (struct dnssoa), ttl, nsname, nslabel, label);
         if (!a)
                 return 0;
-        uint8_t* p = (uint8_t*)*q - (len + 3 + sizeof (struct dnssoa));
-        *p = len;
-        memcpy(p + 1, SOA_ADMIN, len);
-        p += len + 1;
+        char* p = *q - (len + 3 + sizeof (struct dnssoa));
+        *p++ = len;
+        memcpy(p, SOA_ADMIN, len);
+        p += len;
         *(uint16_t*)p = htons(label | LABEL_BITS);
-        p += 2;
-        struct dnssoa* s = (struct dnssoa*)p;
+        struct dnssoa* s = (struct dnssoa*)(p + 2);
         s->serial = htonl(soa.serial);
         s->refresh = htonl(soa.refresh);
         s->retry = htonl(soa.retry);
@@ -251,24 +242,14 @@ int main(int argc, char* argv[]) {
 
         uint16_t port = 53;
         uint32_t ttl = 30;
-        int daemonize = 0, verbose = 0;
-        char c;
-        char* ns[MAX_NS], *txt = 0;
-        int numns = 0;
+        int daemonize = 0, verbose = 0, numns = 0;
+        char c, *ns[MAX_NS], *txt = 0;
         while ((c = getopt(argc, argv, "hvdp:t:n:x:")) != -1) {
                 switch (c) {
-                case 'p':
-                        port = atoi(optarg);
-                        break;
-                case 't':
-                        ttl = atoi(optarg);
-                        break;
-                case 'd':
-                        daemonize = 1;
-                        break;
-                case 'v':
-                        ++verbose;
-                        break;
+                case 'p': port = atoi(optarg); break;
+                case 't': ttl = atoi(optarg);  break;
+                case 'd': daemonize = 1;       break;
+                case 'v': ++verbose;           break;
                 case 'x':
                         txt = optarg;
                         if (strlen(txt) > 255)
@@ -371,17 +352,16 @@ int main(int argc, char* argv[]) {
 
                 uint16_t qtype = ntohs(*((uint16_t*)q));
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
+                ASSUME(qclass == CLASS_INET, NOTIMPL);
                 q += 4;
 
-                ASSUME(qclass == CLASS_INET, NOTIMPL);
-
                 if (verbose > 0)
-                        printf("Q %-5s %s\n", type2str(qtype),  name);
+                        printf("Q %-5s %s\n", type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** d = domains; *d; ++d) {
                         char* r = name + strlen(name) - strlen(*d);
-                        if ((r == name || (r > name && r[-1] == '.')) && !strcmp(r, *d)) {
+                        if (!strcmp(r, *d) && (r == name || (r > name && r[-1] == '.'))) {
                                 uint16_t domainlabel = sizeof(struct dnsheader) + (r - name);
 
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
@@ -444,8 +424,7 @@ int main(int argc, char* argv[]) {
                 if (error) {
                         if (verbose > 0)
                                 printf("E %d\n", error);
-                        ancount = nscount = arcount = 0;
-                        h->qdcount = 0;
+                        h->qdcount = ancount = nscount = arcount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
                 h->flags |= htons(FLAG_QR | FLAG_AA | error);
