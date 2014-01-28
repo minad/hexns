@@ -152,6 +152,7 @@ aaaa ZÖF a:b::c0ef
 aaaa ZÄF a:b::caef
 aaaa zöööf a:b::c0e0:e0ef
 aaaa zöph a:b::c0ef
+aaaa tüt a:b::d0ed
 aaaa zofenpeter a:b::c:feb:ede7
 
 start 3001 500 a:b::/96 org x

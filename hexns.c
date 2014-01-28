@@ -117,7 +117,7 @@ static void suffix1337(char* dst, size_t size, const char* name) {
                 case 'r':           *p++ = 0x7; break;
                 case 't':           *p++ = 0xD; break;
                 case 195:
-                        if (q[1] == 164 || q[1] == 132 || q[1] == 182 || q[1] == 150) {
+                        if (q[1] == 164 || q[1] == 132 || q[1] == 182 || q[1] == 150 || q[1] == 188) {
                                 ++q;
                                 *p++ = *q == 164 || *q == 132 ? 0xA : 0x0;
                                 if (p < nibs + sizeof (nibs))
