@@ -1,0 +1,5 @@
+# Option array
+OPTIONS=(
+-v
+1:2:3::
+hexns.org)
