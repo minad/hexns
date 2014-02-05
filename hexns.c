@@ -1,5 +1,6 @@
 // Hexspeak DNS server by Daniel Mendler <mail@daniel-mendler.de>
 #define _BSD_SOURCE
+#define _XOPEN_SOURCE
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -11,12 +12,13 @@
 #include <getopt.h>
 #include <pwd.h>
 #include <time.h>
+#include <signal.h>
 
 #define SOA_ADMIN        "postmaster"
 #define DIE(cond, name)  if (!(cond)) { perror(#name); exit(1); }
 #define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
 #define ASSUME(cond, e)  if (!(cond)) { error = ERROR_##e; goto error; }
-#define LOG(...)         if (verbose > 0) { printf(__VA_ARGS__); }
+#define LOG(...)         if (verbose > 0) { fprintf(log, __VA_ARGS__); }
 
 enum {
         CLASS_INET   = 0x01,
@@ -228,7 +230,8 @@ int main(int argc, char* argv[]) {
         uint32_t ttl = 30;
         int daemonize = 0, verbose = 0, numns = 0;
         char c, *ns[MAX_NS], *txt = 0;
-        while ((c = getopt(argc, argv, "hvdp:t:n:x:")) != -1) {
+        FILE *log = stdout;
+        while ((c = getopt(argc, argv, "hvdp:t:n:x:l:")) != -1) {
                 switch (c) {
                 case 'p': port = atoi(optarg); break;
                 case 't': ttl = atoi(optarg);  break;
@@ -237,6 +240,10 @@ int main(int argc, char* argv[]) {
                 case 'x':
                         txt = optarg;
                         FATAL(strlen(txt) <= 255, "TXT field too long");
+                        break;
+                case 'l':
+                        log = fopen(optarg, "a");
+                        DIE(log, "Could not open log file");
                         break;
                 case 'n':
                         FATAL(numns < MAX_NS, "Too many nameservers given");
@@ -297,6 +304,10 @@ int main(int argc, char* argv[]) {
                 FATAL(setuid(0) < 0, "Dropping privileges failed");
         }
 
+        struct sigaction sig = { .sa_handler = exit };
+        sigemptyset(&sig.sa_mask);
+        DIE(!sigaction(SIGINT, &sig, 0) || !sigaction(SIGTERM, &sig, 0), "sigaction");
+
         for (;;) {
                 struct sockaddr_storage ss;
                 socklen_t sslen = sizeof (ss);
@@ -335,7 +346,7 @@ int main(int argc, char* argv[]) {
                                         ++ancount;
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
-                                                printf("%10ld R AAAA  %s\n", now, name);
+                                                fprintf(log, "%10ld R AAAA  %s\n", now, name);
                                         }
                                 }
                                 if (txt && (qtype == TYPE_TXT || qtype == TYPE_ANY)) {
