@@ -1,5 +1,6 @@
 # Option array
 OPTIONS=(
 -v
+-l /var/log/hexns.log
 1:2:3::
 hexns.org)

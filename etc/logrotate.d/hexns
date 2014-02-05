@@ -1,0 +1,8 @@
+/var/log/hexns.log {
+  rotate 12
+  monthly
+  compress
+  missingok
+  notifempty
+}
+
