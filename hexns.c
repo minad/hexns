@@ -224,8 +224,6 @@ static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uin
 }
 
 int main(int argc, char* argv[]) {
-        setvbuf(stdout, NULL, _IONBF, 0);
-
         uint16_t port = 53;
         uint32_t ttl = 30;
         int daemonize = 0, verbose = 0, numns = 0;
@@ -258,6 +256,8 @@ int main(int argc, char* argv[]) {
 
         if (argc - optind < 2)
                 usage(argv[0]);
+
+        setvbuf(log, NULL, _IONBF, 0);
 
         char* p = strchr(argv[optind], '/');
         size_t prefix = 0;
