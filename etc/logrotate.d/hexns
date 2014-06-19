@@ -4,5 +4,7 @@
   compress
   missingok
   notifempty
+  postrotate
+    invoke-rc.d hexns restart > /dev/null
 }
 
