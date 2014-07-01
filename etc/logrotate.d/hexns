@@ -6,5 +6,6 @@
   notifempty
   postrotate
     invoke-rc.d hexns restart > /dev/null
+  endscript
 }
 
