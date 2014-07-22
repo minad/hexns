@@ -163,6 +163,19 @@ static char* dns2str(char* str, size_t size, char* dns, const char* end) {
         return dns;
 }
 
+static void str2dns(const char* str, char* dns) {
+        const char* end;
+        do {
+                end = strchr(str, '.');
+                size_t len = end ? end - str : strlen(str);
+                *dns++ = len;
+                memcpy(dns, str, len);
+                dns += len;
+                str += len + 1;
+        } while (end);
+        *dns = 0;
+}
+
 static struct dnsrecord* record(char** q, uint16_t label, uint16_t type, uint32_t ttl, uint16_t rdlength) {
         struct dnsrecord* a = (struct dnsrecord*)*q;
         *q += sizeof (struct dnsrecord) + rdlength;
@@ -176,24 +189,16 @@ static struct dnsrecord* record(char** q, uint16_t label, uint16_t type, uint32_
         return a;
 }
 
-static struct dnsrecord* record_a(char** q, const void* addr, uint32_t ttl, uint16_t label) {
-        struct dnsrecord* a = record(q, label, TYPE_A, ttl, 4);
+static struct dnsrecord* record_rdata(char** q, uint16_t label, uint16_t type, uint32_t ttl, const void* rdata, uint16_t rdlength) {
+        struct dnsrecord* a = record(q, label, type, ttl, rdlength);
         if (!a)
                 return 0;
-        memcpy(a->rdata, addr, 4);
-        return a;
-}
-
-static struct dnsrecord* record_aaaa(char** q, const void* addr, uint32_t ttl, uint16_t label) {
-        struct dnsrecord* a = record(q, label, TYPE_AAAA, ttl, 16);
-        if (!a)
-                return 0;
-        memcpy(a->rdata, addr, 16);
+        memcpy(a->rdata, rdata, rdlength);
         return a;
 }
 
 static struct dnsrecord* record_aaaa1337(char** q, const void* addr, uint32_t ttl, uint16_t label, size_t prefix, const char* name) {
-        struct dnsrecord* a = record_aaaa(q, addr, ttl, label);
+        struct dnsrecord* a = record_rdata(q, label, TYPE_AAAA, ttl, addr, 16);
         if (name)
                 suffix1337(a->rdata + prefix, 16 - prefix, name);
         return a;
@@ -207,19 +212,7 @@ static struct dnsrecord* record_ns(char** q, uint16_t type, size_t rdlength, uin
                 *((uint16_t*)a->rdata) = htons(*nslabel | LABEL_BITS);
         } else {
                 *nslabel = a->rdata - buf;
-                char* data = a->rdata;
-                const char* begin = nsname, *end;
-                while ((end = strchr(begin, '.'))) {
-                        *data++ = end - begin;
-                        memcpy(data, begin, end - begin);
-                        data += end - begin;
-                        begin = end + 1;
-                }
-                end = begin + strlen(begin);
-                *data++ = end - begin;
-                memcpy(data, begin, end - begin);
-                data += end - begin;
-                *data = 0;
+                str2dns(nsname, a->rdata);
         }
         return a;
 }
@@ -427,11 +420,11 @@ int main(int argc, char* argv[]) {
                                                 // Additional records
                                                 for (int i = 0; i < numns; ++i) {
                                                         if (ns[i].has6) {
-                                                                ASSUME(record_aaaa(&q, &ns[i].addr6, ttl, nslabel[i]), SERVER);
+                                                                ASSUME(record_rdata(&q, nslabel[i], TYPE_AAAA, ttl, &ns[i].addr6, 16), SERVER);
                                                                 ++arcount;
                                                         }
                                                         if (ns[i].has4) {
-                                                                ASSUME(record_a(&q, &ns[i].addr4, ttl, nslabel[i]), SERVER);
+                                                                ASSUME(record_rdata(&q, nslabel[i], TYPE_A, ttl, &ns[i].addr4, 4), SERVER);
                                                                 ++arcount;
                                                         }
                                                 }
