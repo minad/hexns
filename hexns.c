@@ -70,6 +70,13 @@ struct dnssoa {
         uint32_t minttl;
 } __attribute__ ((packed));
 
+struct nameserver {
+        char*           name;
+        int             has4, has6;
+        struct in_addr  addr4;
+        struct in6_addr addr6;
+};
+
 static const char* type2str(uint16_t type) {
         static char buf[8];
         switch (type) {
@@ -138,7 +145,7 @@ static void suffix1337(char* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns] ipv6addr domains...", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns,ipv6[,ipv4]] ipv6addr domains...", prog);
         exit(1);
 }
 
@@ -169,28 +176,50 @@ static struct dnsrecord* record(char** q, uint16_t label, uint16_t type, uint32_
         return a;
 }
 
-static struct dnsrecord* record_aaaa(char** q, size_t prefix, const void* addr, uint32_t ttl, const char* name, uint16_t label) {
+static struct dnsrecord* record_a(char** q, const void* addr, uint32_t ttl, uint16_t label) {
+        struct dnsrecord* a = record(q, label, TYPE_A, ttl, 4);
+        if (!a)
+                return 0;
+        memcpy(a->rdata, addr, 4);
+        return a;
+}
+
+static struct dnsrecord* record_aaaa(char** q, const void* addr, uint32_t ttl, uint16_t label) {
         struct dnsrecord* a = record(q, label, TYPE_AAAA, ttl, 16);
         if (!a)
                 return 0;
         memcpy(a->rdata, addr, 16);
+        return a;
+}
+
+static struct dnsrecord* record_aaaa1337(char** q, const void* addr, uint32_t ttl, uint16_t label, size_t prefix, const char* name) {
+        struct dnsrecord* a = record_aaaa(q, addr, ttl, label);
         if (name)
                 suffix1337(a->rdata + prefix, 16 - prefix, name);
         return a;
 }
 
 static struct dnsrecord* record_ns(char** q, uint16_t type, size_t rdlength, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
-        size_t len = *nslabel ? 2 : strlen(nsname) + 3;
-        struct dnsrecord* a = record(q, label, type, ttl, rdlength + len);
+        struct dnsrecord* a = record(q, label, type, ttl, rdlength + (*nslabel ? 2 : strlen(nsname) + 2));
         if (!a)
                 return 0;
         if (*nslabel) {
                 *((uint16_t*)a->rdata) = htons(*nslabel | LABEL_BITS);
         } else {
                 *nslabel = a->rdata - buf;
-                a->rdata[0] = len - 3;
-                memcpy(a->rdata + 1, nsname, len);
-                *((uint16_t*)(a->rdata + len - 2)) = htons(label | LABEL_BITS);
+                char* data = a->rdata;
+                const char* begin = nsname, *end;
+                while ((end = strchr(begin, '.'))) {
+                        *data++ = end - begin;
+                        memcpy(data, begin, end - begin);
+                        data += end - begin;
+                        begin = end + 1;
+                }
+                end = begin + strlen(begin);
+                *data++ = end - begin;
+                memcpy(data, begin, end - begin);
+                data += end - begin;
+                *data = 0;
         }
         return a;
 }
@@ -223,10 +252,11 @@ static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uin
 }
 
 int main(int argc, char* argv[]) {
+        struct nameserver ns[MAX_NS] = {};
         uint16_t port = 53;
         uint32_t ttl = 300;
         int daemonize = 0, verbose = 0, numns = 0;
-        char c, *ns[MAX_NS], *txt = 0;
+        char c, *txt = 0, *p;
         FILE *log = stdout;
         while ((c = getopt(argc, argv, "hvdp:t:n:x:l:")) != -1) {
                 switch (c) {
@@ -247,8 +277,16 @@ int main(int argc, char* argv[]) {
                         break;
                 case 'n':
                         FATAL(numns < MAX_NS, "Too many nameservers given");
-                        ns[numns++] = optarg;
-                        FATAL(!strchr(optarg, '.'), "Nameserver must not contain .");
+                        while ((p = strsep(&optarg, ","))) {
+                                if (inet_pton(AF_INET6, p, &ns[numns].addr6))
+                                        ns[numns].has6 = 1;
+                                else if (inet_pton(AF_INET, p, &ns[numns].addr4))
+                                        ns[numns].has4 = 1;
+                                else
+                                        ns[numns].name = p;
+                        }
+                        FATAL(ns[numns].name && (ns[numns].has4 || ns[numns].has6), "You must specify a name and an IPv4/IPv6 address.");
+                        ++numns;
                         break;
                 default:
                         usage(argv[0]);
@@ -261,7 +299,7 @@ int main(int argc, char* argv[]) {
 
         setvbuf(log, NULL, _IONBF, 0);
 
-        char* p = strchr(argv[optind], '/');
+        p = strchr(argv[optind], '/');
         size_t prefix = 0;
         if (p) {
                 *p++ = 0;
@@ -344,7 +382,7 @@ int main(int argc, char* argv[]) {
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
                                         if (r > name)
                                                 *r = 0;
-                                        ASSUME(record_aaaa(&q, prefix, &addr, ttl, r > name ? name : 0, sizeof(struct dnsheader)), SERVER);
+                                        ASSUME(record_aaaa1337(&q, &addr, ttl, sizeof(struct dnsheader), prefix, r > name ? name : 0), SERVER);
                                         ++ancount;
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
@@ -365,17 +403,17 @@ int main(int argc, char* argv[]) {
                                         if (r == name) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
-                                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
-                                                                LOG("%10ld R NS    %s.%s.\n", now, ns[i], *domain);
+                                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i].name, nslabel + i, domlabel), SERVER);
+                                                                LOG("%10ld R NS    %s.%s.\n", now, ns[i].name, *domain);
                                                         }
                                                         ancount += numns;
                                                 }
                                                 if (qtype == TYPE_SOA || qtype == TYPE_ANY) {
-                                                        struct dnssoa* s = record_soa(&q, ttl, ns[0], nslabel, domlabel);
+                                                        struct dnssoa* s = record_soa(&q, ttl, ns[0].name, nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
                                                         LOG("%10ld R SOA   %s.%s. %s.%s. %d %d %d %d %d\n",
-                                                            now, ns[0], *domain, SOA_ADMIN, *domain,
+                                                            now, ns[0].name, *domain, SOA_ADMIN, *domain,
                                                             s->serial, s->refresh, s->retry, s->expire, s->minttl);
                                                 }
                                         }
@@ -383,16 +421,23 @@ int main(int argc, char* argv[]) {
                                         if (ancount > 0) {
                                                 // Authority record
                                                 for (int i = 0; i < numns; ++i)
-                                                        ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
+                                                        ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i].name, nslabel + i, domlabel), SERVER);
                                                 nscount += numns;
 
                                                 // Additional records
-                                                for (int i = 0; i < numns; ++i)
-                                                        ASSUME(record_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
-                                                arcount += numns;
+                                                for (int i = 0; i < numns; ++i) {
+                                                        if (ns[i].has6) {
+                                                                ASSUME(record_aaaa(&q, &ns[i].addr6, ttl, nslabel[i]), SERVER);
+                                                                ++arcount;
+                                                        }
+                                                        if (ns[i].has4) {
+                                                                ASSUME(record_a(&q, &ns[i].addr4, ttl, nslabel[i]), SERVER);
+                                                                ++arcount;
+                                                        }
+                                                }
                                         } else {
                                                 // Authority record
-                                                ASSUME(record_soa(&q, ttl, ns[0], nslabel, domlabel), SERVER);
+                                                ASSUME(record_soa(&q, ttl, ns[0].name, nslabel, domlabel), SERVER);
                                                 ++nscount;
                                         }
 

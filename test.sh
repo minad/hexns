@@ -16,7 +16,7 @@ start() {
     addr=$3
     domain=$4
     domain2=$5
-    ./hexns -l test.log -n nameserver1 -n slavenameserver -vp $1 -t $2 $3 $4 $5 &
+    ./hexns -l test.log -n master.nameserver,1.2.3.4 -n slave.nameserver,::1,1.2.3.4 -vp $1 -t $2 $3 $4 $5 &
     pid=$!
 
     output=$(dig -p $port @127.0.0.1 $domain AAAA)
@@ -43,28 +43,35 @@ aaaa() {
 	#echo "$output" | grep -P AAAA
 	status=1
     fi
-    if echo "$output" | grep -P "$domain\\.\\s+$ttl\\s+IN\\s+NS\\s+nameserver1\\.$domain\\.\$" > /dev/null; then
+    if echo "$output" | grep -P "$domain\\.\\s+$ttl\\s+IN\\s+NS\\s+master\\.nameserver\\.\$" > /dev/null; then
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
 	#echo "$output" | grep -P AAAA
 	status=1
     fi
-    if echo "$output" | grep -P "$domain\\.\\s+$ttl\\s+IN\\s+NS\\s+slavenameserver\\.$domain\\.\$" > /dev/null; then
+    if echo "$output" | grep -P "$domain\\.\\s+$ttl\\s+IN\\s+NS\\s+slave\\.nameserver\\.\$" > /dev/null; then
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
 	#echo "$output" | grep -P AAAA
 	status=1
     fi
-    if echo "$output" | grep -P "nameserver1\\.$domain\\.\\s+$ttl\\s+IN\\s+AAAA" > /dev/null; then
+    if echo "$output" | grep -P "master\\.nameserver\\.\\s+$ttl\\s+IN\\s+A" > /dev/null; then
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
 	#echo "$output" | grep -P AAAA
 	status=1
     fi
-    if echo "$output" | grep -P "slavenameserver\\.$domain\\.\\s+$ttl\\s+IN\\s+AAAA" > /dev/null; then
+    if echo "$output" | grep -P "slave\\.nameserver\\.\\s+$ttl\\s+IN\\s+A" > /dev/null; then
+	echo -n '.'
+    else
+	echo -e "\nERROR $1.$domain"
+	#echo "$output" | grep -P AAAA
+	status=1
+    fi
+    if echo "$output" | grep -P "slave\\.nameserver\\.\\s+$ttl\\s+IN\\s+AAAA" > /dev/null; then
 	echo -n '.'
     else
 	echo -e "\nERROR $1.$domain"
