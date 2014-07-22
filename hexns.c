@@ -379,17 +379,23 @@ int main(int argc, char* argv[]) {
                                                             s->serial, s->refresh, s->retry, s->expire, s->minttl);
                                                 }
                                         }
-                                        // Authority records
-                                        for (int i = 0; i < numns; ++i)
-                                                ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
-                                        nscount += numns;
-                                        if (qtype == TYPE_MX || qtype == TYPE_A || qtype == TYPE_CNAME) {
+
+                                        if (ancount > 0) {
+                                                // Authority record
+                                                for (int i = 0; i < numns; ++i)
+                                                        ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
+                                                nscount += numns;
+
+                                                // Additional records
+                                                for (int i = 0; i < numns; ++i)
+                                                        ASSUME(record_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
+                                                arcount += numns;
+                                        } else {
+                                                // Authority record
                                                 ASSUME(record_soa(&q, ttl, ns[0], nslabel, domlabel), SERVER);
                                                 ++nscount;
                                         }
-                                        for (int i = 0; i < numns; ++i)
-                                                ASSUME(record_aaaa(&q, prefix, &addr, ttl, ns[i], nslabel[i]), SERVER);
-                                        arcount += numns;
+
                                 }
 
                                 break;
