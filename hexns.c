@@ -13,62 +13,15 @@
 #include <pwd.h>
 #include <time.h>
 #include <signal.h>
+#include "utils.h"
 
-#define SOA_ADMIN        "postmaster"
-#define DIE(cond, name)  if (!(cond)) { perror(#name); exit(1); }
-#define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
-#define ASSUME(cond, e)  if (!(cond)) { error = ERROR_##e; goto error; }
-#define LOG(...)         if (verbose > 0) { fprintf(log, __VA_ARGS__); }
-
-enum {
-        CLASS_INET   = 0x01,
-        OP_MASK      = 0x7000,
-        OP_QUERY     = 0x0000,
-        FLAG_QR      = 0x8000,
-        FLAG_AA      = 0x0400,
-        FLAG_RD      = 0x0100,
-        LABEL_BITS   = 0xC000,
-        ERROR_FORMAT = 0x0001,
-        ERROR_SERVER = 0x0002,
-        ERROR_NOTIMP = 0x0004,
-        MAX_NS       = 4,
-        TYPE_A       = 1,
-        TYPE_NS      = 2,
-        TYPE_CNAME   = 5,
-        TYPE_SOA     = 6,
-        TYPE_MX      = 15,
-        TYPE_TXT     = 16,
-        TYPE_AAAA    = 28,
-        TYPE_ANY     = 255,
-};
+#define SOA_ADMIN "postmaster"
 
 static char buf[0x400];
 
-struct dnsheader {
-        uint16_t id;
-        uint16_t flags;
-        uint16_t qdcount;
-        uint16_t ancount;
-        uint16_t nscount;
-        uint16_t arcount;
-} __attribute__ ((packed));
-
-struct dnsrecord {
-        uint16_t label;
-        uint16_t type;
-        uint16_t class;
-        uint32_t ttl;
-        uint16_t rdlength;
-        char     rdata[0];
-} __attribute__ ((packed));
-
-struct dnssoa {
-        uint32_t serial;
-        uint32_t refresh;
-        uint32_t retry;
-        uint32_t expire;
-        uint32_t minttl;
-} __attribute__ ((packed));
+enum {
+        MAX_NS = 4
+};
 
 struct nameserver {
         char*           name;
@@ -77,21 +30,17 @@ struct nameserver {
         struct in6_addr addr6;
 };
 
-static const char* type2str(uint16_t type) {
-        static char buf[8];
-        switch (type) {
-        case TYPE_A:     return "A";
-        case TYPE_NS:    return "NS";
-        case TYPE_CNAME: return "CNAME";
-        case TYPE_MX:    return "MX";
-        case TYPE_TXT:   return "TXT";
-        case TYPE_SOA:   return "SOA";
-        case TYPE_AAAA:  return "AAAA";
-        case TYPE_ANY:   return "ANY";
-        default:
-                snprintf(buf, sizeof (buf), "%d", type);
-                return buf;
-        }
+static void str2dns(const char* str, char* dns) {
+        const char* end;
+        do {
+                end = strchr(str, '.');
+                size_t len = end ? end - str : strlen(str);
+                *dns++ = len;
+                memcpy(dns, str, len);
+                dns += len;
+                str += len + 1;
+        } while (end);
+        *dns = 0;
 }
 
 static void suffix1337(char* dst, size_t size, const char* name) {
@@ -145,35 +94,8 @@ static void suffix1337(char* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns,ipv6[,ipv4]] ipv6addr domains...", prog);
+        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns,ipv6[,ipv4]] ipv6addr domains...\n", prog);
         exit(1);
-}
-
-static char* dns2str(char* str, size_t size, char* dns, const char* end) {
-        size_t n;
-        char* p = str;
-        for (; dns < end && (n = *dns++); p += n, dns += n) {
-                if (n > 63 || p + n + 1 > str + size - 1)
-                        return 0;
-                if (p != str)
-                        *p++ = '.';
-                memcpy(p, dns, n);
-        }
-        *p = 0;
-        return dns;
-}
-
-static void str2dns(const char* str, char* dns) {
-        const char* end;
-        do {
-                end = strchr(str, '.');
-                size_t len = end ? end - str : strlen(str);
-                *dns++ = len;
-                memcpy(dns, str, len);
-                dns += len;
-                str += len + 1;
-        } while (end);
-        *dns = 0;
 }
 
 static struct dnsrecord* record(char** q, uint16_t label, uint16_t type, uint32_t ttl, uint16_t rdlength) {
@@ -209,7 +131,9 @@ static struct dnsrecord* record_ns(char** q, uint16_t type, size_t rdlength, uin
         if (!a)
                 return 0;
         if (*nslabel) {
-                *((uint16_t*)a->rdata) = htons(*nslabel | LABEL_BITS);
+                label = *nslabel | LABEL_BITS;
+                a->rdata[0] = (label >> 8) & 0xFF;
+                a->rdata[1] = label & 0xFF;
         } else {
                 *nslabel = a->rdata - buf;
                 str2dns(nsname, a->rdata);
@@ -323,19 +247,7 @@ int main(int argc, char* argv[]) {
         };
         DIE(!bind(sock, (struct sockaddr*)&sa, sizeof(sa)), bind);
         DIE(!daemonize || !daemon(0, 0), daemon);
-
-        if (!getuid()) {
-                struct passwd* pw = getpwnam("nobody");
-                DIE(pw, getpwname);
-                char name[] = "/tmp/hexns.XXXXXX";
-                DIE(mkdtemp(name), mkdtemp);
-                DIE(!chdir(name), chdir);
-                DIE(!rmdir(name), rmdir);
-                DIE(!chroot("."), chroot);
-                DIE(!setgid(pw->pw_gid), setgid);
-                DIE(!setuid(pw->pw_uid), setuid);
-                FATAL(setuid(0) < 0, "Dropping privileges failed");
-        }
+        drop_privs();
 
         struct sigaction sig = { .sa_handler = exit };
         sigemptyset(&sig.sa_mask);
@@ -350,6 +262,8 @@ int main(int argc, char* argv[]) {
                         continue;
                 }
 
+                time_t now = time(0);
+
                 struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t error = 0;
                 ASSUME((ntohs(h->flags) & OP_MASK) == OP_QUERY && ntohs(h->qdcount) == 1, NOTIMP);
@@ -363,19 +277,16 @@ int main(int argc, char* argv[]) {
                 ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
-                time_t now = time(0);
                 LOG("%10ld Q %-5s %s\n", now, type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** domain = argv + optind + 1; *domain; ++domain) {
-                        char* r = name + strlen(name) - strlen(*domain);
-                        if (!strcmp(r, *domain) && (r == name || (r > name && r[-1] == '.'))) {
-                                uint16_t domlabel = sizeof(struct dnsheader) + (r - name);
+                        int len = subdomain(name, *domain);
+                        if (len >= 0) {
+                                uint16_t domlabel = sizeof(struct dnsheader) + len;
 
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
-                                        if (r > name)
-                                                *r = 0;
-                                        ASSUME(record_aaaa1337(&q, &addr, ttl, sizeof(struct dnsheader), prefix, r > name ? name : 0), SERVER);
+                                        ASSUME(record_aaaa1337(&q, &addr, ttl, sizeof(struct dnsheader), prefix, len > 0 ? name : 0), SERVER);
                                         ++ancount;
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
@@ -393,7 +304,7 @@ int main(int argc, char* argv[]) {
                                 }
                                 if (numns > 0) {
                                         uint16_t nslabel[MAX_NS] = {0};
-                                        if (r == name) {
+                                        if (!len) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
                                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i].name, nslabel + i, domlabel), SERVER);
