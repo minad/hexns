@@ -397,7 +397,7 @@ int main(int argc, char* argv[]) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
                                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i].name, nslabel + i, domlabel), SERVER);
-                                                                LOG("%10ld R NS    %s.%s.\n", now, ns[i].name, *domain);
+                                                                LOG("%10ld R NS    %s.\n", now, ns[i].name);
                                                         }
                                                         ancount += numns;
                                                 }
@@ -405,8 +405,8 @@ int main(int argc, char* argv[]) {
                                                         struct dnssoa* s = record_soa(&q, ttl, ns[0].name, nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
-                                                        LOG("%10ld R SOA   %s.%s. %s.%s. %d %d %d %d %d\n",
-                                                            now, ns[0].name, *domain, SOA_ADMIN, *domain,
+                                                        LOG("%10ld R SOA   %s. %s.%s. %d %d %d %d %d\n",
+                                                            now, ns[0].name, SOA_ADMIN, *domain,
                                                             s->serial, s->refresh, s->retry, s->expire, s->minttl);
                                                 }
                                         }
