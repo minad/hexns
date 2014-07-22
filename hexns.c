@@ -67,7 +67,7 @@ struct dnssoa {
         uint32_t refresh;
         uint32_t retry;
         uint32_t expire;
-        uint32_t minimum;
+        uint32_t minttl;
 } __attribute__ ((packed));
 
 static const char* type2str(uint16_t type) {
@@ -196,15 +196,14 @@ static struct dnsrecord* record_ns(char** q, uint16_t type, size_t rdlength, uin
 }
 
 static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
-        static struct dnssoa soa = {
-                .refresh = 14400,
-                .retry   = 1800,
-                .expire  = 604800,
-                .minimum = 86400,
-        };
         time_t now = time(0);
         struct tm* t = localtime(&now);
+        static struct dnssoa soa;
         soa.serial = 1000000 * (t->tm_year + 1900) + 10000 * (t->tm_mon + 1) + 100 * t->tm_mday + t->tm_hour * 4 + t->tm_min / 15;
+        soa.refresh = ttl;
+        soa.retry   = ttl;
+        soa.expire  = 10 * ttl;
+        soa.minttl  = ttl;
         size_t len = strlen(SOA_ADMIN);
         struct dnsrecord* a = record_ns(q, TYPE_SOA, len + 3 + sizeof (struct dnssoa), ttl, nsname, nslabel, label);
         if (!a)
@@ -219,22 +218,25 @@ static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uin
         s->refresh = htonl(soa.refresh);
         s->retry = htonl(soa.retry);
         s->expire = htonl(soa.expire);
-        s->minimum = htonl(soa.minimum);
+        s->minttl = htonl(soa.minttl);
         return &soa;
 }
 
 int main(int argc, char* argv[]) {
         uint16_t port = 53;
-        uint32_t ttl = 30;
+        uint32_t ttl = 300;
         int daemonize = 0, verbose = 0, numns = 0;
         char c, *ns[MAX_NS], *txt = 0;
         FILE *log = stdout;
         while ((c = getopt(argc, argv, "hvdp:t:n:x:l:")) != -1) {
                 switch (c) {
                 case 'p': port = atoi(optarg); break;
-                case 't': ttl = atoi(optarg);  break;
                 case 'd': daemonize = 1;       break;
                 case 'v': ++verbose;           break;
+                case 't':
+                        ttl = atoi(optarg);
+                        FATAL(ttl >= 60, "ttl must be >= 60");
+                        break;
                 case 'x':
                         txt = optarg;
                         FATAL(strlen(txt) <= 255, "TXT field too long");
@@ -374,9 +376,10 @@ int main(int argc, char* argv[]) {
                                                         ++ancount;
                                                         LOG("%10ld R SOA   %s.%s. %s.%s. %d %d %d %d %d\n",
                                                             now, ns[0], *domain, SOA_ADMIN, *domain,
-                                                            s->serial, s->refresh, s->retry, s->expire, s->minimum);
+                                                            s->serial, s->refresh, s->retry, s->expire, s->minttl);
                                                 }
                                         }
+                                        // Authority records
                                         for (int i = 0; i < numns; ++i)
                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i], nslabel + i, domlabel), SERVER);
                                         nscount += numns;
