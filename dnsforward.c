@@ -9,20 +9,21 @@ struct zone {
 };
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-dhv] [-p port] [zone=][ip:]port...\n", prog);
+        fprintf(stderr, "Usage: %s [-dhv] [-t timeout] [-p port] [zone=][ip:]port...\n", prog);
         exit(1);
 }
 
 int main(int argc, char* argv[]) {
         uint16_t port = 53;
-        int daemonize = 0, verbose = 0;
+        int daemonize = 0, verbose = 0, timeout = 5;
         char c;
         FILE *log = stdout;
-        while ((c = getopt(argc, argv, "hvdp:l:")) != -1) {
+        while ((c = getopt(argc, argv, "hvdp:l:t:")) != -1) {
                 switch (c) {
                 case 'p': port = atoi(optarg); break;
                 case 'd': daemonize = 1;       break;
                 case 'v': ++verbose;           break;
+                case 't': timeout = atoi(optarg);  break;
                 case 'l':
                         log = fopen(optarg, "a");
                         DIE(log, "Could not open log file");
@@ -72,7 +73,7 @@ int main(int argc, char* argv[]) {
         DIE(clisock, socket);
 
         struct timeval tv;
-        tv.tv_sec = 1;
+        tv.tv_sec = timeout;
         tv.tv_usec = 0;
         DIE(!setsockopt(clisock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval)), setsockopt);
 
