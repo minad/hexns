@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
                 ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
-                LOG("%s %s %s Q %-5s %s\n", nowstr, host, port, type2str(qtype), name);
+                LOG("%s %s %s Q %s %s\n", nowstr, host, port, type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** domain = argv + optind + 1; *domain; ++domain) {
