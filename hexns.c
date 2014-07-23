@@ -282,7 +282,7 @@ int main(int argc, char* argv[]) {
                         int len = subdomain(name, *domain);
                         if (len >= 0) {
                                 if (len > 0)
-                                        name[len] = 0;
+                                        name[len - 1] = 0;
 
                                 uint16_t domlabel = sizeof(struct dnsheader) + len;
 
