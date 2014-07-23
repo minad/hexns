@@ -77,8 +77,10 @@ int main(int argc, char* argv[]) {
                 }
                 if (!zones[i].addr.sin6_port)
                         zones[i].addr.sin6_port = htons(53);
-                if (!zones[i].addr.sin6_family)
+                if (!zones[i].addr.sin6_family) {
+                        zones[i].addr.sin6_family = AF_INET6;
                         zones[i].addr.sin6_addr = in6addr_loopback;
+                }
                 FATAL(!zones[i].name || strlen(zones[i].name) > 1, "Zone name must not be empty.");
         }
 

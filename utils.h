@@ -16,7 +16,7 @@
 
 #define DIE(cond, name)  if (!(cond)) { perror(#name); exit(1); }
 #define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
-#define ASSUME(cond, e)  if (!(cond)) { error = ERROR_##e; goto error; }
+#define ASSUME(cond, e)  if (!(cond)) { LOG("FAIL %s\n", #cond); error = ERROR_##e; goto error; }
 #define LOG(...)         if (verbose > 0) { fprintf(log, __VA_ARGS__); }
 
 enum {
