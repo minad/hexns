@@ -2,10 +2,6 @@
 #include "utils.h"
 #include "list.h"
 
-enum {
-        MAX_QUEUE = 1024,
-};
-
 struct zone {
         char*               name;
         struct sockaddr_in6 addr;
@@ -184,16 +180,16 @@ int main(int argc, char* argv[]) {
 
         error:
                 list_for_each_entry_safe(e, next, &queue, list) {
-                        if (e->time + 10 < now) {
-                                if (verbose > 0) {
-                                        getnameinfo((struct sockaddr*)&e->zone->addr, sizeof(e->zone->addr), zhost, sizeof(zhost), zport, sizeof(zport), NI_NUMERICHOST | NI_NUMERICSERV);
-                                        getnameinfo((struct sockaddr*)&e->addr, sizeof(e->addr), host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-                                        LOG("%s X %s %s -> %s %s\n", nowstr, host, port, zhost, zport);
-                                }
-                                send_error(sock, &e->header, ERROR_SERVER, (struct sockaddr*)&e->addr, sizeof (e->addr));
-                                list_del(&e->list);
-                                free(e);
+                        if (e->time + 10 >= now)
+                                break;
+                        if (verbose > 0) {
+                                getnameinfo((struct sockaddr*)&e->zone->addr, sizeof(e->zone->addr), zhost, sizeof(zhost), zport, sizeof(zport), NI_NUMERICHOST | NI_NUMERICSERV);
+                                getnameinfo((struct sockaddr*)&e->addr, sizeof(e->addr), host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+                                LOG("%s X %s %s -> %s %s\n", nowstr, host, port, zhost, zport);
                         }
+                        send_error(sock, &e->header, ERROR_SERVER, (struct sockaddr*)&e->addr, sizeof (e->addr));
+                        list_del(&e->list);
+                        free(e);
                 }
 
                 if (error) {
