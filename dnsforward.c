@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
 
                 struct entry* e, *next;
                 list_for_each_entry_safe(e, next, &queue, list) {
-                        if (e->time > now + 10) {
+                        if (e->time + 10 < now) {
                                 LOG("%10ld expired\n", now);
                                 send_error(sock, &e->header, ERROR_SERVER, (struct sockaddr*)&e->addr, sizeof (e->addr));
                                 list_del(&e->list);
@@ -158,8 +158,11 @@ int main(int argc, char* argv[]) {
                 getnameinfo((struct sockaddr*)&ss, sslen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
                 LOG("%10ld query %s %s from %s %s\n", now, type2str(qtype), name, host, port);
 
-                for (int i = 0; i < numzones; ++i) {
+                int i;
+                for (i = 0; i < numzones; ++i) {
                         if (!zones[i].name || subdomain(name, zones[i].name) >= 0) {
+                                getnameinfo((struct sockaddr*)&zones[i].addr, sizeof(zones[i].addr), host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+                                LOG("%10ld query %s %s to %s %s\n", now, type2str(qtype), name, zones[i].name ? zones[i].name : "null", host, port);
                                 ASSUME(sendto(sock, buf, size, 0, (struct sockaddr*)&zones[i].addr, sizeof (zones[i].addr)) >= 0, SERVER);
                                 struct entry* e = malloc(sizeof (struct entry));
                                 e->zone = zones + i;
@@ -170,6 +173,7 @@ int main(int argc, char* argv[]) {
                                 break;
                         }
                 }
+                ASSUME(i < numzones, SERVER);
 
         error:
                 if (error) {
