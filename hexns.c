@@ -3,7 +3,7 @@
 
 #define SOA_ADMIN "postmaster"
 
-static char buf[0x400];
+static char buf[PACKET_SIZE];
 
 enum {
         NS_HAS4 = 1,

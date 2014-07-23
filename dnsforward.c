@@ -15,7 +15,7 @@ struct entry {
         time_t              time;
 };
 
-static char buf[0x400];
+static char buf[PACKET_SIZE];
 LIST_HEAD(queue);
 
 static void usage(const char* prog) {

@@ -40,6 +40,7 @@ enum {
         TYPE_TXT     = 16,
         TYPE_AAAA    = 28,
         TYPE_ANY     = 255,
+        PACKET_SIZE  = 0x1000
 };
 
 struct dnsheader {
