@@ -181,12 +181,14 @@ int main(int argc, char* argv[]) {
                 case 'n':
                         FATAL(numns < MAX_NS, "Too many nameservers given");
                         while ((p = strsep(&optarg, ","))) {
-                                if (inet_pton(AF_INET6, p, &ns[numns].addr6))
+                                if (!ns[numns].has6 && inet_pton(AF_INET6, p, &ns[numns].addr6))
                                         ns[numns].has6 = 1;
-                                else if (inet_pton(AF_INET, p, &ns[numns].addr4))
+                                else if (!ns[numns].has6 && inet_pton(AF_INET, p, &ns[numns].addr4))
                                         ns[numns].has4 = 1;
-                                else
+                                else if (!ns[numns].name)
                                         ns[numns].name = p;
+                                else
+                                        FATAL(1, "Invalid nameserver specification");
                         }
                         FATAL(ns[numns].name && (ns[numns].has4 || ns[numns].has6), "You must specify a name and an IPv4/IPv6 address.");
                         ++numns;
