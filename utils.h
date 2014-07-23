@@ -13,6 +13,7 @@
 #include <time.h>
 #include <signal.h>
 #include <errno.h>
+#include <netdb.h>
 
 #define DIE(cond, name)  if (!(cond)) { perror(#name); exit(1); }
 #define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
@@ -114,14 +115,12 @@ static void drop_privs() {
         }
 }
 
-static int subdomain(char* s, const char* domain) {
+static int subdomain(const char* s, const char* domain) {
         int len = strlen(s) - strlen(domain);
         if (len < 0)
                 return -1;
-        char* r = s + len;
+        const char* r = s + len;
         if (strcmp(r, domain) || (r > s && r[-1] != '.'))
                 return -1;
-        if (r > s)
-                r[-1] = 0;
         return len;
 }

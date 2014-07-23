@@ -16,7 +16,7 @@ start() {
     addr=$3
     domain=$4
     domain2=$5
-    ./hexns -l test.log -n master.nameserver,1.2.3.4 -n slave.nameserver,::1,1.2.3.4 -vp $1 -t $2 $3 $4 $5 &
+    ./hexns -l test.log -n 'master.nameserver 1.2.3.4' -n 'slave.nameserver ::1 1.2.3.4' -vp $1 -t $2 $3 $4 $5 &
     pid=$!
 
     output=$(dig -p $port @127.0.0.1 $domain AAAA)

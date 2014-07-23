@@ -6,12 +6,13 @@
 static char buf[0x400];
 
 enum {
-        MAX_NS = 4
+        NS_HAS4 = 1,
+        NS_HAS6 = 2,
 };
 
 struct nameserver {
         char*           name;
-        int             has4, has6;
+        int             flags;
         struct in_addr  addr4;
         struct in6_addr addr6;
 };
@@ -80,7 +81,7 @@ static void suffix1337(char* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-dhv] [-p port] [-t ttl] [-x txt] [-n ns,ipv6[,ipv4]] ipv6addr domains...\n", prog);
+        fprintf(stderr, "Usage: %s [-dhv] [-p port] [-t ttl] [-x txt] [-n 'ns ip6 ip4'] ip6addr domains...\n", prog);
         exit(1);
 }
 
@@ -155,12 +156,15 @@ static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uin
 }
 
 int main(int argc, char* argv[]) {
-        struct nameserver ns[MAX_NS] = {};
         uint16_t port = 53;
         uint32_t ttl = 300;
         int daemonize = 0, verbose = 0, numns = 0;
         char c, *txt = 0, *p;
         FILE *log = stdout;
+
+        struct nameserver ns[argc];
+        memset(ns, 0, sizeof (ns));
+
         while ((c = getopt(argc, argv, "hvdp:t:n:x:l:")) != -1) {
                 switch (c) {
                 case 'p': port = atoi(optarg); break;
@@ -179,18 +183,17 @@ int main(int argc, char* argv[]) {
                         DIE(log, "Could not open log file");
                         break;
                 case 'n':
-                        FATAL(numns < MAX_NS, "Too many nameservers given");
-                        while ((p = strsep(&optarg, ","))) {
-                                if (!ns[numns].has6 && inet_pton(AF_INET6, p, &ns[numns].addr6))
-                                        ns[numns].has6 = 1;
-                                else if (!ns[numns].has6 && inet_pton(AF_INET, p, &ns[numns].addr4))
-                                        ns[numns].has4 = 1;
+                        while ((p = strsep(&optarg, " "))) {
+                                if (!(ns[numns].flags & NS_HAS6) && inet_pton(AF_INET6, p, &ns[numns].addr6))
+                                        ns[numns].flags |= NS_HAS6;
+                                else if (!(ns[numns].flags & NS_HAS4) && inet_pton(AF_INET, p, &ns[numns].addr4))
+                                        ns[numns].flags |= NS_HAS4;
                                 else if (!ns[numns].name)
                                         ns[numns].name = p;
                                 else
                                         FATAL(1, "Invalid nameserver specification");
                         }
-                        FATAL(ns[numns].name && (ns[numns].has4 || ns[numns].has6), "You must specify a name and an IPv4/IPv6 address.");
+                        FATAL(ns[numns].name && ns[numns].flags, "You must specify a name and an IPv4/IPv6 address.");
                         ++numns;
                         break;
                 default:
@@ -251,12 +254,19 @@ int main(int argc, char* argv[]) {
                 }
 
                 time_t now = time(0);
+                struct tm* nowtm = localtime(&now);
+                char nowstr[32];
+                strftime(nowstr, sizeof (nowstr), "%F %T", nowtm);
+
+                char host[NI_MAXHOST], port[NI_MAXSERV];
+                if (verbose > 0)
+                        getnameinfo((struct sockaddr*)&ss, sslen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
 
                 struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t error = 0;
                 ASSUME((ntohs(h->flags) & OP_MASK) == OP_QUERY && ntohs(h->qdcount) == 1, NOTIMP);
 
-                char name[512];
+                char name[NI_MAXHOST];
                 char *q = dns2str(name, sizeof(name), buf + sizeof (struct dnsheader), buf + size);
                 ASSUME(q && q + 4 <= buf + size, FORMAT);
 
@@ -265,12 +275,15 @@ int main(int argc, char* argv[]) {
                 ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
-                LOG("%10ld Q %-5s %s\n", now, type2str(qtype), name);
+                LOG("%s %s %s Q %-5s %s\n", nowstr, host, port, type2str(qtype), name);
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** domain = argv + optind + 1; *domain; ++domain) {
                         int len = subdomain(name, *domain);
                         if (len >= 0) {
+                                if (len > 0)
+                                        name[len] = 0;
+
                                 uint16_t domlabel = sizeof(struct dnsheader) + len;
 
                                 if (qtype == TYPE_AAAA || qtype == TYPE_ANY) {
@@ -278,7 +291,7 @@ int main(int argc, char* argv[]) {
                                         ++ancount;
                                         if (verbose > 0) {
                                                 inet_ntop(AF_INET6, q - 16, name, sizeof (name));
-                                                fprintf(log, "%10ld R AAAA  %s\n", now, name);
+                                                LOG("%s %s %s R AAAA  %s\n", nowstr, host, port, name);
                                         }
                                 }
                                 if (txt && (qtype == TYPE_TXT || qtype == TYPE_ANY)) {
@@ -288,15 +301,17 @@ int main(int argc, char* argv[]) {
                                         a->rdata[0] = len;
                                         memcpy(a->rdata + 1, txt, len);
                                         ++ancount;
-                                        LOG("%10ld R TXT   \"%s\"\n", now, txt);
+                                        LOG("%s %s %s R TXT   \"%s\"\n", nowstr, host, port, txt);
                                 }
                                 if (numns > 0) {
-                                        uint16_t nslabel[MAX_NS] = {0};
+                                        uint16_t nslabel[argc];
+                                        memset(nslabel, 0, sizeof (nslabel));
+
                                         if (!len) {
                                                 if (qtype == TYPE_NS || qtype == TYPE_ANY) {
                                                         for (int i = 0; i < numns; ++i) {
                                                                 ASSUME(record_ns(&q, TYPE_NS, 0, ttl, ns[i].name, nslabel + i, domlabel), SERVER);
-                                                                LOG("%10ld R NS    %s.\n", now, ns[i].name);
+                                                                LOG("%s %s %s R NS    %s.\n", nowstr, host, port, ns[i].name);
                                                         }
                                                         ancount += numns;
                                                 }
@@ -304,8 +319,8 @@ int main(int argc, char* argv[]) {
                                                         struct dnssoa* s = record_soa(&q, ttl, ns[0].name, nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
-                                                        LOG("%10ld R SOA   %s. %s.%s. %d %d %d %d %d\n",
-                                                            now, ns[0].name, SOA_ADMIN, *domain,
+                                                        LOG("%s %s %s R SOA   %s. %s.%s. %d %d %d %d %d\n",
+                                                            nowstr, host, port, ns[0].name, SOA_ADMIN, *domain,
                                                             s->serial, s->refresh, s->retry, s->expire, s->minttl);
                                                 }
                                         }
@@ -318,11 +333,11 @@ int main(int argc, char* argv[]) {
 
                                                 // Additional records
                                                 for (int i = 0; i < numns; ++i) {
-                                                        if (ns[i].has6) {
+                                                        if (ns[i].flags & NS_HAS6) {
                                                                 ASSUME(record_rdata(&q, nslabel[i], TYPE_AAAA, ttl, &ns[i].addr6, 16), SERVER);
                                                                 ++arcount;
                                                         }
-                                                        if (ns[i].has4) {
+                                                        if (ns[i].flags & NS_HAS4) {
                                                                 ASSUME(record_rdata(&q, nslabel[i], TYPE_A, ttl, &ns[i].addr4, 4), SERVER);
                                                                 ++arcount;
                                                         }
@@ -341,7 +356,7 @@ int main(int argc, char* argv[]) {
 
         error:
                 if (error) {
-                        LOG("%10ld E %d\n", now, error);
+                        LOG("%s E %d\n", nowstr, error);
                         h->qdcount = ancount = nscount = arcount = 0;
                         q = buf + sizeof (struct dnsheader);
                 }
