@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
                                 ASSUME(sendto(clisock, query, querysize, 0, (struct sockaddr*)&zones[i].addr, sizeof (zones[i].addr)) >= 0, SERVER);
                                 struct sockaddr_storage zone_ss;
                                 socklen_t zone_sslen = sizeof (zone_ss);
-                                anssize = recvfrom(clisock, ans, sizeof (query), 0, (struct sockaddr*)&zone_ss, &zone_sslen);
+                                anssize = recvfrom(clisock, ans, sizeof (ans), 0, (struct sockaddr*)&zone_ss, &zone_sslen);
                                 ASSUME(anssize > 0, SERVER);
                                 break;
                         }
