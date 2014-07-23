@@ -162,7 +162,7 @@ int main(int argc, char* argv[]) {
                 for (i = 0; i < numzones; ++i) {
                         if (!zones[i].name || subdomain(name, zones[i].name) >= 0) {
                                 getnameinfo((struct sockaddr*)&zones[i].addr, sizeof(zones[i].addr), host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-                                LOG("%10ld query %s %s to %s %s\n", now, type2str(qtype), name, zones[i].name ? zones[i].name : "null", host, port);
+                                LOG("%10ld query %s %s to %s %s\n", now, type2str(qtype), name, host, port);
                                 ASSUME(sendto(sock, buf, size, 0, (struct sockaddr*)&zones[i].addr, sizeof (zones[i].addr)) >= 0, SERVER);
                                 struct entry* e = malloc(sizeof (struct entry));
                                 e->zone = zones + i;
