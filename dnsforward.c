@@ -1,18 +1,4 @@
 // DNS forwarder by Daniel Mendler <mail@daniel-mendler.de>
-#define _BSD_SOURCE
-#define _XOPEN_SOURCE
-#include <arpa/inet.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <idna.h>
-#include <ctype.h>
-#include <getopt.h>
-#include <pwd.h>
-#include <time.h>
-#include <signal.h>
 #include "utils.h"
 
 static char query[0x400], ans[0x400];
@@ -23,7 +9,7 @@ struct zone {
 };
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] ip:port[,zone]...\n", prog);
+        fprintf(stderr, "Usage: %s [-dhv] [-p port] [zone=][ip:]port...\n", prog);
         exit(1);
 }
 
@@ -54,21 +40,26 @@ int main(int argc, char* argv[]) {
         struct zone zones[numzones];
         memset(zones, 0, sizeof (struct zone) * numzones);
         for (int i = 0; i < numzones; ++i) {
-                char* p = strchr(argv[optind + i], ',');
+                char* p = strchr(argv[optind + i], '=');
                 if (p) {
-                        FATAL(strlen(p) > 1, "Zone name must not be empty.");
-                        zones[i].name = p + 1;
-                        *p = 0;
-                }
-                p = strchr(argv[optind + i], ':');
-                if (p) {
-                        zones[i].addr.sin_port = htons(atoi(p + 1));
-                        *p = 0;
-                        FATAL(zones[i].addr.sin_port, "Invalid port.");
+                        *p++ = 0;
+                        zones[i].name = argv[optind + i];
+                        FATAL(strlen(zones[i].name) > 1, "Zone name must not be empty.");
                 } else {
-                        zones[i].addr.sin_port = htons(53);
+                        p = argv[optind + i];
                 }
-                FATAL(inet_pton(AF_INET, argv[optind + i], &zones[i].addr.sin_addr), "Invalid address.");
+                char* q = strchr(p, ':');
+                if (q) {
+                        zones[i].addr.sin_port = htons(atoi(q + 1));
+                        *q = 0;
+                        FATAL(inet_pton(AF_INET, p, &zones[i].addr.sin_addr), "Invalid address.");
+                } else if (inet_pton(AF_INET, p, &zones[i].addr.sin_addr)) {
+                        zones[i].addr.sin_port = htons(53);
+                } else {
+                        zones[i].addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+                        zones[i].addr.sin_port = htons(atoi(p));
+                }
+                FATAL(zones[i].addr.sin_port, "Invalid port.");
                 zones[i].addr.sin_family = AF_INET;
         }
 
@@ -83,7 +74,7 @@ int main(int argc, char* argv[]) {
         struct timeval tv;
         tv.tv_sec = 1;
         tv.tv_usec = 0;
-        setsockopt(clisock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval));
+        DIE(!setsockopt(clisock, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(struct timeval)), setsockopt);
 
         struct sockaddr_in6 sa = {
                 .sin6_family = AF_INET6,
@@ -93,7 +84,6 @@ int main(int argc, char* argv[]) {
         DIE(!bind(srvsock, (struct sockaddr*)&sa, sizeof(sa)), bind);
         DIE(!daemonize || !daemon(0, 0), daemon);
         drop_privs();
-
         struct sigaction sig = { .sa_handler = exit };
         sigemptyset(&sig.sa_mask);
         DIE(!sigaction(SIGINT, &sig, 0) || !sigaction(SIGTERM, &sig, 0), "sigaction");
@@ -124,11 +114,10 @@ int main(int argc, char* argv[]) {
 
                 LOG("%10ld Q %-5s %s\n", now, type2str(qtype), name);
 
-                size_t anssize = 0;
+                ssize_t anssize = 0;
                 for (int i = 0; i < numzones; ++i) {
                         if (!zones[i].name || subdomain(name, zones[i].name) >= 0) {
                                 ASSUME(sendto(clisock, query, querysize, 0, (struct sockaddr*)&zones[i].addr, sizeof (zones[i].addr)) >= 0, SERVER);
-
                                 struct sockaddr_storage zone_ss;
                                 socklen_t zone_sslen = sizeof (zone_ss);
                                 anssize = recvfrom(clisock, ans, sizeof (query), 0, (struct sockaddr*)&zone_ss, &zone_sslen);
@@ -136,14 +125,17 @@ int main(int argc, char* argv[]) {
                                 break;
                         }
                 }
+                ASSUME(anssize > 0, REFUSED);
 
         error:
-                if (error || anssize == 0) {
+                if (error) {
                         LOG("%10ld E %d\n", now, error);
                         h->qdcount = h->ancount = h->nscount = h->arcount = 0;
                         h->flags |= htons(FLAG_QR | error);
                         h->flags &= ~htons(FLAG_RD);
                         memcpy(ans, h, anssize = sizeof (struct dnsheader));
+                } else {
+                        LOG("%10ld R %ld\n", now, anssize);
                 }
 
                 if (sendto(srvsock, ans, anssize, 0, (struct sockaddr*)&ss, sslen) < 0)

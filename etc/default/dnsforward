@@ -1,0 +1,6 @@
+# Option array
+OPTIONS=(
+-v
+-l /var/log/dnsforward.log
+zone.hexns.org=5301
+zone.hexns.org=5302)

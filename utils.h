@@ -1,3 +1,19 @@
+#define _BSD_SOURCE
+#define _XOPEN_SOURCE
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <idna.h>
+#include <ctype.h>
+#include <getopt.h>
+#include <pwd.h>
+#include <time.h>
+#include <signal.h>
+#include <errno.h>
+
 #define DIE(cond, name)  if (!(cond)) { perror(#name); exit(1); }
 #define FATAL(cond, msg) if (!(cond)) { fprintf(stderr, "%s\n", msg); exit(1); }
 #define ASSUME(cond, e)  if (!(cond)) { error = ERROR_##e; goto error; }
@@ -14,6 +30,7 @@ enum {
         ERROR_FORMAT = 0x0001,
         ERROR_SERVER = 0x0002,
         ERROR_NOTIMP = 0x0004,
+        ERROR_REFUSED= 0x0005,
         TYPE_A       = 1,
         TYPE_NS      = 2,
         TYPE_CNAME   = 5,
@@ -93,6 +110,7 @@ static void drop_privs() {
                 DIE(!setgid(pw->pw_gid), setgid);
                 DIE(!setuid(pw->pw_uid), setuid);
                 FATAL(setuid(0) < 0, "Dropping privileges failed");
+                errno = 0;
         }
 }
 

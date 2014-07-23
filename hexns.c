@@ -1,18 +1,4 @@
 // Hexspeak DNS server by Daniel Mendler <mail@daniel-mendler.de>
-#define _BSD_SOURCE
-#define _XOPEN_SOURCE
-#include <arpa/inet.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <idna.h>
-#include <ctype.h>
-#include <getopt.h>
-#include <pwd.h>
-#include <time.h>
-#include <signal.h>
 #include "utils.h"
 
 #define SOA_ADMIN "postmaster"
@@ -94,7 +80,7 @@ static void suffix1337(char* dst, size_t size, const char* name) {
 }
 
 static void usage(const char* prog) {
-        fprintf(stderr, "Usage: %s [-d] [-p port] [-t ttl] [-x txt] [-n ns,ipv6[,ipv4]] ipv6addr domains...\n", prog);
+        fprintf(stderr, "Usage: %s [-dhv] [-p port] [-t ttl] [-x txt] [-n ns,ipv6[,ipv4]] ipv6addr domains...\n", prog);
         exit(1);
 }
 

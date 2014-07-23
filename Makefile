@@ -3,7 +3,7 @@ CC=gcc
 CFLAGS=-g -std=c11 -Wall
 #CFLAGS=-O3 -std=c11 -Wall
 
-all: hexns dnsforward
+all: hexns dnsforward test
 
 hexns: hexns.c Makefile
 	$(CC) $(CFLAGS) -lidn -o $@ $<
