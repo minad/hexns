@@ -128,9 +128,7 @@ static struct dnsrecord* record_ns(char** q, uint16_t type, size_t rdlength, uin
         return a;
 }
 
-static struct dnssoa* record_soa(char** q, uint32_t ttl, const char* nsname, uint16_t* nslabel, uint16_t label) {
-        time_t now = time(0);
-        struct tm* t = localtime(&now);
+static struct dnssoa* record_soa(char** q, uint32_t ttl, struct tm* t, const char* nsname, uint16_t* nslabel, uint16_t label) {
         static struct dnssoa soa;
         soa.serial = 1000000 * (t->tm_year + 1900) + 10000 * (t->tm_mon + 1) + 100 * t->tm_mday + t->tm_hour * 4 + t->tm_min / 15;
         soa.refresh = ttl;
@@ -316,7 +314,7 @@ int main(int argc, char* argv[]) {
                                                         ancount += numns;
                                                 }
                                                 if (qtype == TYPE_SOA || qtype == TYPE_ANY) {
-                                                        struct dnssoa* s = record_soa(&q, ttl, ns[0].name, nslabel, domlabel);
+                                                        struct dnssoa* s = record_soa(&q, ttl, nowtm, ns[0].name, nslabel, domlabel);
                                                         ASSUME(s, SERVER);
                                                         ++ancount;
                                                         LOG("%s %s %s R SOA   %s. %s.%s. %d %d %d %d %d\n",
@@ -344,7 +342,7 @@ int main(int argc, char* argv[]) {
                                                 }
                                         } else {
                                                 // Authority record
-                                                ASSUME(record_soa(&q, ttl, ns[0].name, nslabel, domlabel), SERVER);
+                                                ASSUME(record_soa(&q, ttl, nowtm, ns[0].name, nslabel, domlabel), SERVER);
                                                 ++nscount;
                                         }
 
