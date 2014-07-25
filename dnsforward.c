@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
         drop_privs();
         struct sigaction sig = { .sa_handler = exit };
         sigemptyset(&sig.sa_mask);
-        DIE(!sigaction(SIGINT, &sig, 0) || !sigaction(SIGTERM, &sig, 0), "sigaction");
+        DIE(!sigaction(SIGINT, &sig, 0) || !sigaction(SIGTERM, &sig, 0), sigaction);
 
         for (;;) {
                 struct sockaddr_storage ss;
@@ -116,9 +116,7 @@ int main(int argc, char* argv[]) {
                 char nowstr[32];
                 strftime(nowstr, sizeof (nowstr), "%F %T", nowtm);
 
-                struct dnsheader* h = (struct dnsheader*)buf;
                 uint16_t error = 0;
-
                 ASSUME(sslen == sizeof (struct sockaddr_in6), SERVER);
 
                 char zhost[NI_MAXHOST], zport[NI_MAXSERV], host[NI_MAXHOST], port[NI_MAXSERV];
@@ -126,6 +124,7 @@ int main(int argc, char* argv[]) {
                 if (verbose > 0)
                         getnameinfo((struct sockaddr*)&ss, sslen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
 
+                struct dnsheader* h = (struct dnsheader*)buf;
                 ASSUME(ntohs(h->qdcount) >= 1, NOTIMP);
 
                 char name[NI_MAXHOST];

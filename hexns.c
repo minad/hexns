@@ -178,7 +178,7 @@ int main(int argc, char* argv[]) {
                         break;
                 case 'l':
                         log = fopen(optarg, "a");
-                        DIE(log, "Could not open log file");
+                        FATAL(log, "Could not open log file");
                         break;
                 case 'n':
                         while ((p = strsep(&optarg, " "))) {
@@ -240,7 +240,7 @@ int main(int argc, char* argv[]) {
 
         struct sigaction sig = { .sa_handler = exit };
         sigemptyset(&sig.sa_mask);
-        DIE(!sigaction(SIGINT, &sig, 0) || !sigaction(SIGTERM, &sig, 0), "sigaction");
+        DIE(!sigaction(SIGINT, &sig, 0) || !sigaction(SIGTERM, &sig, 0), sigaction);
 
         for (;;) {
                 struct sockaddr_storage ss;
