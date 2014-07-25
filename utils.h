@@ -125,3 +125,19 @@ static int subdomain(const char* s, const char* domain) {
                 return -1;
         return len;
 }
+
+static char* printable(const char* s, char* ret, size_t size) {
+        char *p = ret, *end = ret + size;
+        while (*s && p < end) {
+                if (isprint(*s)) {
+                        *p++ = *s++;
+                } else {
+                        snprintf(p, end - p, "\\x%02x", *s++);
+                        p += 4;
+                }
+        }
+        if (p >= end)
+                p = end - 1;
+        *p = 0;
+        return ret;
+}

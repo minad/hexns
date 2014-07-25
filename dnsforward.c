@@ -119,17 +119,18 @@ int main(int argc, char* argv[]) {
                 uint16_t error = 0;
                 ASSUME(sslen == sizeof (struct sockaddr_in6), SERVER);
 
-                char zhost[NI_MAXHOST], zport[NI_MAXSERV], host[NI_MAXHOST], port[NI_MAXSERV];
-
-                if (verbose > 0)
-                        getnameinfo((struct sockaddr*)&ss, sslen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-
                 struct dnsheader* h = (struct dnsheader*)buf;
                 ASSUME(ntohs(h->qdcount) >= 1, NOTIMP);
 
                 char name[NI_MAXHOST];
                 char *q = dns2str(name, sizeof(name), buf + sizeof (struct dnsheader), buf + size);
                 ASSUME(q && q + 4 <= buf + size, FORMAT);
+
+                char pname[NI_MAXHOST], zhost[NI_MAXHOST], zport[NI_MAXSERV], host[NI_MAXHOST], port[NI_MAXSERV];
+                if (verbose > 0) {
+                        printable(name, pname, sizeof (pname));
+                        getnameinfo((struct sockaddr*)&ss, sslen, host, sizeof(host), port, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
+                }
 
                 uint16_t qtype = ntohs(*((uint16_t*)q));
                 uint16_t qclass = ntohs(*((uint16_t*)q + 1));
@@ -142,7 +143,7 @@ int main(int argc, char* argv[]) {
                                 if (h->id == e->header.id && !memcmp(&e->zone->addr, &ss, sizeof (e->zone->addr))) {
                                         if (verbose > 0) {
                                                 getnameinfo((struct sockaddr*)&e->addr, sizeof(e->addr), zhost, sizeof(zhost), zport, sizeof(zport), NI_NUMERICHOST | NI_NUMERICSERV);
-                                                LOG("%s R %s %s %s %s <- %s %s %s\n", nowstr, zhost, zport, type2str(qtype), name, host, port, e->zone->name ? e->zone->name : "DEFAULT");
+                                                LOG("%s R %s %s %s %s <- %s %s %s\n", nowstr, zhost, zport, type2str(qtype), pname, host, port, e->zone->name ? e->zone->name : "DEFAULT");
                                         }
                                         if (sendto(sock, buf, size, 0, (struct sockaddr*)&e->addr, sizeof (e->addr)) < 0)
                                                 perror("sendto");
@@ -154,14 +155,14 @@ int main(int argc, char* argv[]) {
                         continue;
                 }
 
-                LOG("%s Q %s %s %s %s\n", nowstr, type2str(qtype), name, host, port);
+                LOG("%s Q %s %s %s %s\n", nowstr, type2str(qtype), pname, host, port);
 
                 int i;
                 for (i = 0; i < numzones; ++i) {
                         if (!zones[i].name || subdomain(name, zones[i].name) >= 0) {
                                 if (verbose > 0) {
                                         getnameinfo((struct sockaddr*)&zones[i].addr, sizeof(zones[i].addr), zhost, sizeof(host), zport, sizeof(port), NI_NUMERICHOST | NI_NUMERICSERV);
-                                        LOG("%s F %s %s %s %s -> %s %s %s\n", nowstr, host, port, type2str(qtype), name, zhost, zport, zones[i].name ? zones[i].name : "DEFAULT");
+                                        LOG("%s F %s %s %s %s -> %s %s %s\n", nowstr, host, port, type2str(qtype), pname, zhost, zport, zones[i].name ? zones[i].name : "DEFAULT");
                                 }
                                 ASSUME(sendto(sock, buf, size, 0, (struct sockaddr*)&zones[i].addr, sizeof (zones[i].addr)) >= 0, SERVER);
                                 struct entry* e = malloc(sizeof (struct entry));

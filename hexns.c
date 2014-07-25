@@ -273,7 +273,11 @@ int main(int argc, char* argv[]) {
                 ASSUME(qclass == CLASS_INET, NOTIMP);
                 q += 4;
 
-                LOG("%s %s %s Q %-5s %s\n", nowstr, host, port, type2str(qtype), name);
+                if (verbose > 0) {
+                        char pname[NI_MAXHOST];
+                        printable(name, pname, sizeof (pname));
+                        LOG("%s %s %s Q %-5s %s\n", nowstr, host, port, type2str(qtype), pname);
+                }
 
                 uint16_t ancount = 0, nscount = 0, arcount = 0;
                 for (char** domain = argv + optind + 1; *domain; ++domain) {
@@ -342,8 +346,12 @@ int main(int argc, char* argv[]) {
                                                 }
                                         } else {
                                                 // Authority record
-                                                ASSUME(record_soa(&q, ttl, nowtm, ns[0].name, nslabel, domlabel), SERVER);
+                                                struct dnssoa* s = record_soa(&q, ttl, nowtm, ns[0].name, nslabel, domlabel);
+                                                ASSUME(s, SERVER);
                                                 ++nscount;
+                                                LOG("%s %s %s R AUTH  %s. %s.%s. %d %d %d %d %d\n",
+                                                    nowstr, host, port, ns[0].name, SOA_ADMIN, *domain,
+                                                    s->serial, s->refresh, s->retry, s->expire, s->minttl);
                                         }
 
                                 }
